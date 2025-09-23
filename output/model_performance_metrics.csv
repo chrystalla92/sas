@@ -1,0 +1,2 @@
+AUC,Gini,KS_Statistic,KS_Cutoff,PSI,PSI_interpretation,accuracy_at_50,precision_at_50,recall_at_50,f1_score_at_50,specificity_at_50,model_name,validation_date,dataset_size
+0.6517,0.3034,0.2129,-1.3026,0.0000,No significant change,0.7833333333,0.6666666667,0.045112782,0.0845070423,0.9935760171,Logistic Regression,23SEP2025,3000
