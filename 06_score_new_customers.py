@@ -45,6 +45,7 @@ import pandas as pd
 import joblib
 import os
 import sys
+import subprocess
 import warnings
 from pathlib import Path
 from datetime import datetime, date
@@ -52,9 +53,46 @@ from typing import Dict, List, Tuple, Optional, Any
 
 warnings.filterwarnings('ignore')
 
+def run_model_training() -> bool:
+    """
+    Run model training script (04_train_credit_model.py) when models are missing.
+    
+    Returns:
+        bool: True if training completed successfully, False otherwise
+    """
+    print("Model joblibs not found. Running model training...")
+    print("This may take a few minutes...")
+    
+    try:
+        # Run the model training script using subprocess
+        result = subprocess.run([sys.executable, '04_train_credit_model.py'], 
+                              capture_output=True, text=True, cwd='.')
+        
+        if result.returncode != 0:
+            print(f"❌ Model training script failed with return code {result.returncode}")
+            if result.stderr:
+                print(f"Error output: {result.stderr}")
+            if result.stdout:
+                print(f"Standard output: {result.stdout}")
+            return False
+        else:
+            print("✓ Model training script executed successfully")
+            if result.stdout:
+                # Show only the last few lines of output to avoid cluttering
+                output_lines = result.stdout.strip().split('\n')
+                print("Training summary:")
+                for line in output_lines[-10:]:  # Show last 10 lines
+                    if line.strip():
+                        print(f"  {line}")
+            return True
+            
+    except Exception as e:
+        print(f"❌ Error running model training: {str(e)}")
+        return False
+
 def load_trained_models() -> Dict[str, Any]:
     """
-    Load trained models from Script 4, or use mock models if not available.
+    Load trained models from Script 4, or run training if models are not available.
     
     Returns:
         dict: Dictionary containing loaded models and metadata
@@ -64,52 +102,81 @@ def load_trained_models() -> Dict[str, Any]:
     models_dir = Path('models')
     models = {}
     
+    # Define required model files
+    required_models = {
+        'logistic': models_dir / 'logistic_model.joblib',
+        'decision_tree': models_dir / 'decision_tree_model.joblib'
+    }
+    
+    optional_models = {
+        'calibrated': models_dir / 'calibrated_model.joblib',
+        'metadata': models_dir / 'model_metadata.joblib'
+    }
+    
+    # Check if required models exist
+    missing_required_models = []
+    for model_name, model_path in required_models.items():
+        if not model_path.exists():
+            missing_required_models.append(model_name)
+    
+    # If required models are missing, run training
+    if missing_required_models:
+        print(f"Required models missing: {missing_required_models}")
+        if run_model_training():
+            print("✓ Model training completed. Attempting to load models...")
+        else:
+            print("❌ Model training failed. Falling back to mock predictions.")
+            return {'logistic': None, 'decision_tree': None, 'calibrated': None, 'metadata': None}
+    
     try:
-        # Try to load logistic regression model
-        lr_path = models_dir / 'logistic_model.joblib'
+        # Load logistic regression model
+        lr_path = required_models['logistic']
         if lr_path.exists():
             lr_data = joblib.load(lr_path)
             models['logistic'] = lr_data
             print(f"✓ Logistic regression model loaded from {lr_path}")
         else:
-            print(f"⚠️  Logistic regression model not found at {lr_path}")
-            print("ℹ️  Using existing scored data or creating mock predictions")
+            print(f"❌ Logistic regression model still not found at {lr_path}")
             models['logistic'] = None
         
-        # Try to load decision tree model
-        dt_path = models_dir / 'decision_tree_model.joblib'
+        # Load decision tree model
+        dt_path = required_models['decision_tree']
         if dt_path.exists():
             dt_data = joblib.load(dt_path)
             models['decision_tree'] = dt_data
             print(f"✓ Decision tree model loaded from {dt_path}")
         else:
-            print(f"⚠️  Decision tree model not found at {dt_path}")
+            print(f"❌ Decision tree model still not found at {dt_path}")
             models['decision_tree'] = None
         
-        # Try to load calibrated model (optional)
-        cal_path = models_dir / 'calibrated_model.joblib'
+        # Load optional models
+        cal_path = optional_models['calibrated']
         if cal_path.exists():
             cal_data = joblib.load(cal_path)
             models['calibrated'] = cal_data
             print(f"✓ Calibrated model loaded from {cal_path}")
         else:
-            print(f"ℹ️  Calibrated model not found at {cal_path}")
+            print(f"ℹ️  Calibrated model not found at {cal_path} (optional)")
             models['calibrated'] = None
         
-        # Try to load model metadata
-        metadata_path = models_dir / 'model_metadata.joblib'
+        metadata_path = optional_models['metadata']
         if metadata_path.exists():
             metadata = joblib.load(metadata_path)
             models['metadata'] = metadata
             print(f"✓ Model metadata loaded from {metadata_path}")
         else:
+            print(f"ℹ️  Model metadata not found at {metadata_path} (optional)")
             models['metadata'] = None
+        
+        # Check if we successfully loaded at least one required model
+        if models['logistic'] is None and models['decision_tree'] is None:
+            print("⚠️  No required models could be loaded. Using mock predictions.")
         
         return models
         
     except Exception as e:
         print(f"❌ Error loading models: {str(e)}")
-        # Don't raise error, continue with mock models
+        print("ℹ️  Falling back to mock predictions")
         return {'logistic': None, 'decision_tree': None, 'calibrated': None, 'metadata': None}
 
 def generate_new_customer_applications(num_applications: int = 50) -> pd.DataFrame:
