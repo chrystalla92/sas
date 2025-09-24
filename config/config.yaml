@@ -1,0 +1,213 @@
+# Bank Credit Risk Scoring Model - Configuration File
+# Python Migration from SAS Implementation
+
+# Project Information
+project:
+  name: "Bank Credit Risk Scoring Model"
+  version: "2.0.0"
+  description: "Python implementation of credit risk scoring pipeline"
+  author: "Risk Analytics Team"
+  
+# Directory Structure
+paths:
+  root: "."
+  data: "./data"
+  raw_data: "./data/raw"
+  processed_data: "./data/processed"
+  models: "./models"
+  output: "./output"
+  scripts: "./scripts" 
+  config: "./config"
+  logs: "./logs"
+
+# Data Generation Parameters
+data_generation:
+  num_records: 10000
+  random_seed: 12345
+  train_split: 0.7
+  validation_split: 0.3
+  default_rate_target: 0.20
+  
+  # Customer demographics
+  age_range: [18, 75]
+  age_mean: 42
+  age_std: 12
+  
+  # Income parameters
+  base_income:
+    high_school: 2500
+    bachelors: 4000
+    masters: 5500
+    doctorate: 7000
+  
+  # Employment distribution
+  employment_status_dist:
+    full_time: 0.65
+    self_employed: 0.15
+    part_time: 0.10
+    retired: 0.05
+    unemployed: 0.05
+    
+  # Education distribution  
+  education_dist:
+    high_school: 0.30
+    bachelors: 0.30
+    masters: 0.20
+    doctorate: 0.10
+    other: 0.10
+
+# Feature Engineering
+feature_engineering:
+  # Risk thresholds
+  high_dti_threshold: 0.45
+  low_credit_threshold: 600
+  high_utilization_threshold: 0.8
+  recent_delinquency_months: 12
+  
+  # Credit score ranges
+  credit_score_ranges:
+    excellent: [750, 850]
+    good: [700, 749]
+    fair: [650, 699]
+    poor: [600, 649]
+    very_poor: [300, 599]
+    
+  # Categorical encoding
+  encoding_methods:
+    employment_status: "onehot"
+    education: "ordinal"
+    home_ownership: "onehot"
+    loan_purpose: "onehot"
+
+# Model Training Parameters
+model_training:
+  algorithm: "decision_tree"  # Primary algorithm matching SAS HPSPLIT
+  random_seed: 42
+  
+  # Decision Tree Parameters (matching SAS HPSPLIT configuration)
+  decision_tree:
+    max_depth: 10
+    min_samples_leaf: 50
+    min_samples_split: 100
+    criterion: "gini"
+    max_features: null
+    class_weight: "balanced"
+    
+  # Alternative algorithms for comparison
+  random_forest:
+    n_estimators: 100
+    max_depth: 10
+    min_samples_leaf: 50
+    random_state: 42
+    class_weight: "balanced"
+    
+  logistic_regression:
+    C: 1.0
+    penalty: "l2"
+    solver: "liblinear"
+    random_state: 42
+    class_weight: "balanced"
+    
+  xgboost:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+
+# Model Validation
+model_validation:
+  # Performance thresholds
+  min_accuracy: 0.75
+  min_auc: 0.75
+  min_precision: 0.70
+  min_recall: 0.60
+  
+  # Probability thresholds for risk categorization
+  risk_thresholds:
+    low_risk: 0.1      # Auto-approve
+    medium_risk: 0.3   # Manual review
+    # high_risk: >0.3   # Decline/additional documentation
+    
+  # Cross-validation parameters
+  cv_folds: 5
+  stratified: true
+
+# Production Scoring
+production_scoring:
+  batch_size: 1000
+  num_new_customers: 100
+  
+  # Risk categories and actions
+  risk_categories:
+    low_risk:
+      threshold: [0.0, 0.1]
+      action: "auto_approve"
+      description: "Low default probability - automatic approval"
+      
+    medium_risk: 
+      threshold: [0.1, 0.3]
+      action: "manual_review"
+      description: "Medium default probability - manual review required"
+      
+    high_risk:
+      threshold: [0.3, 1.0] 
+      action: "decline"
+      description: "High default probability - decline or require additional documentation"
+
+# Performance Optimization
+performance:
+  # Parallel processing
+  n_jobs: -1  # Use all available cores
+  chunk_size: 1000
+  
+  # Memory management
+  low_memory: false
+  cache_size: "1GB"
+  
+  # Progress reporting
+  verbose: 1
+  progress_bar: true
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  log_to_file: true
+  log_file: "logs/credit_scoring.log"
+  max_log_size: "10MB"
+  backup_count: 5
+
+# Output Configuration  
+output:
+  # Export formats
+  export_formats: ["csv", "parquet", "excel"]
+  
+  # Report generation
+  generate_reports: true
+  report_format: "html"
+  
+  # Model artifacts
+  save_model: true
+  model_format: "joblib"
+  
+  # Visualization settings
+  figure_size: [12, 8]
+  dpi: 300
+  style: "whitegrid"
+
+# Validation Rules
+validation:
+  data_quality_checks: true
+  schema_validation: true
+  outlier_detection: true
+  missing_value_threshold: 0.05
+  
+  # Expected data ranges
+  expected_ranges:
+    age: [18, 75]
+    credit_score: [300, 850] 
+    credit_utilization: [0, 100]
+    debt_to_income_ratio: [0, 200]
+    monthly_income: [1000, 50000]
