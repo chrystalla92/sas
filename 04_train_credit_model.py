@@ -51,6 +51,7 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 import os
 import sys
+import subprocess
 from pathlib import Path
 import warnings
 import matplotlib
@@ -80,10 +81,22 @@ def ensure_feature_engineering():
     print("Feature engineering datasets not found. Running feature engineering...")
     
     try:
-        # Import and run feature engineering
-        sys.path.append('.')
-        exec(open('03_feature_engineering.py').read())
+        # Import and run feature engineering using subprocess for proper execution
+        result = subprocess.run([sys.executable, '03_feature_engineering.py'], 
+                              capture_output=True, text=True, cwd='.')
         
+        if result.returncode != 0:
+            print(f"❌ Feature engineering script failed with return code {result.returncode}")
+            if result.stderr:
+                print(f"Error output: {result.stderr}")
+            if result.stdout:
+                print(f"Standard output: {result.stdout}")
+            return False
+        else:
+            print("Feature engineering script executed successfully")
+            if result.stdout:
+                print("Script output:", result.stdout)
+            
         # Check again
         if train_file.exists() and val_file.exists():
             print("✓ Feature engineering completed successfully")
