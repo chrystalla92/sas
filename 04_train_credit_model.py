@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Bank Credit Risk Scoring Model - Step 4: Train Credit Model
+Bank Credit Risk Scoring Model - Step 4: Train Credit Model with Probability Calibration
 
-Purpose: Train logistic regression model with feature selection and cross-validation
+Purpose: Train logistic regression model with feature selection, cross-validation, and probability calibration
 Author: Risk Analytics Team
 Date: 2025
 
@@ -12,8 +12,11 @@ This script performs:
 - Hyperparameter optimization using GridSearchCV
 - Stratified cross-validation
 - Model training and evaluation
+- Probability calibration using CalibratedClassifierCV with sigmoid method (Platt scaling)
+- Calibration quality assessment using reliability diagrams, calibration curves, and Brier scores
+- Bin-wise validation of calibrated probabilities vs observed default rates
 - Model coefficient interpretation
-- Model persistence
+- Model persistence (both uncalibrated and calibrated models)
 """
 
 import numpy as np
@@ -29,8 +32,13 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.feature_selection import RFE, SelectKBest, SelectFromModel, chi2, f_classif, mutual_info_classif
 from sklearn.model_selection import GridSearchCV, cross_val_score, StratifiedKFold, train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, roc_curve
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, roc_curve, brier_score_loss
 from sklearn.pipeline import Pipeline
+from sklearn.calibration import CalibratedClassifierCV, calibration_curve
+
+# Plotting imports for reliability diagrams
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
@@ -52,9 +60,11 @@ class CreditModelTrainer:
         self.scaler = StandardScaler()
         self.label_encoders = {}
         self.model = None
+        self.calibrated_model = None
         self.best_features = None
         self.feature_selection_results = {}
         self.cv_results = {}
+        self.calibration_results = {}
         
     def load_data(self, data_path: str = "output/credit_data_sample.csv") -> pd.DataFrame:
         """
@@ -565,6 +575,416 @@ class CreditModelTrainer:
         
         return self.model
     
+    def split_data_for_calibration(self, X: pd.DataFrame, y: pd.Series, 
+                                  selected_features: List[str], 
+                                  test_size: float = 0.2) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        """
+        Split data into training and calibration/validation sets.
+        
+        Args:
+            X: Feature matrix
+            y: Target vector
+            selected_features: List of selected feature names
+            test_size: Proportion of data for calibration/validation
+            
+        Returns:
+            Tuple of (X_train, X_cal, y_train, y_cal)
+        """
+        print(f"Splitting data for calibration (validation size: {test_size:.1%})...")
+        
+        # Select only the chosen features
+        X_selected = X[selected_features]
+        
+        # Split data stratified by target
+        X_train, X_cal, y_train, y_cal = train_test_split(
+            X_selected, y, 
+            test_size=test_size, 
+            stratify=y, 
+            random_state=self.random_state
+        )
+        
+        print(f"Training set: {len(X_train)} samples")
+        print(f"Calibration/Validation set: {len(X_cal)} samples")
+        print(f"Training set default rate: {y_train.mean():.3f}")
+        print(f"Validation set default rate: {y_cal.mean():.3f}")
+        
+        return X_train, X_cal, y_train, y_cal
+    
+    def calibrate_model(self, X_train: pd.DataFrame, y_train: pd.Series,
+                       X_cal: pd.DataFrame, y_cal: pd.Series,
+                       selected_features: List[str], 
+                       best_params: Dict[str, Any],
+                       cv_folds: int = 5) -> Any:
+        """
+        Calibrate the logistic regression model using CalibratedClassifierCV with sigmoid method.
+        
+        Args:
+            X_train: Training feature matrix
+            y_train: Training target vector
+            X_cal: Calibration feature matrix  
+            y_cal: Calibration target vector
+            selected_features: List of selected feature names
+            best_params: Optimal hyperparameters for base model
+            cv_folds: Number of CV folds for calibration
+            
+        Returns:
+            Calibrated classifier
+        """
+        print("Calibrating model using CalibratedClassifierCV with sigmoid method...")
+        
+        # Scale training data
+        X_train_scaled = self.scaler.fit_transform(X_train)
+        X_cal_scaled = self.scaler.transform(X_cal)
+        
+        # Create base logistic regression model
+        base_model = LogisticRegression(
+            random_state=self.random_state,
+            **best_params
+        )
+        
+        # Train base model on training set
+        base_model.fit(X_train_scaled, y_train)
+        
+        # Create calibrated classifier using sigmoid method (Platt scaling)
+        calibrated_model = CalibratedClassifierCV(
+            base_estimator=base_model,
+            method='sigmoid',  # Platt scaling equivalent to SAS
+            cv=cv_folds
+        )
+        
+        # Fit calibration using the training data (CalibratedClassifierCV handles CV internally)
+        calibrated_model.fit(X_train_scaled, y_train)
+        
+        # Store the calibrated model
+        self.calibrated_model = calibrated_model
+        
+        # Get predictions from both models for comparison
+        uncalibrated_probs = base_model.predict_proba(X_cal_scaled)[:, 1]
+        calibrated_probs = calibrated_model.predict_proba(X_cal_scaled)[:, 1]
+        
+        print(f"Base model validation AUC: {roc_auc_score(y_cal, uncalibrated_probs):.4f}")
+        print(f"Calibrated model validation AUC: {roc_auc_score(y_cal, calibrated_probs):.4f}")
+        
+        return calibrated_model
+    
+    def generate_calibration_curve(self, y_true: pd.Series, y_prob_uncalibrated: np.ndarray, 
+                                 y_prob_calibrated: np.ndarray, n_bins: int = 10) -> Dict[str, Any]:
+        """
+        Generate calibration curve data using sklearn.calibration.calibration_curve.
+        
+        Args:
+            y_true: True binary labels
+            y_prob_uncalibrated: Predicted probabilities from uncalibrated model
+            y_prob_calibrated: Predicted probabilities from calibrated model
+            n_bins: Number of bins for calibration curve
+            
+        Returns:
+            Dictionary with calibration curve data
+        """
+        print(f"Generating calibration curves with {n_bins} bins...")
+        
+        # Generate calibration curves
+        fraction_pos_uncal, mean_pred_uncal = calibration_curve(
+            y_true, y_prob_uncalibrated, n_bins=n_bins, strategy='uniform'
+        )
+        
+        fraction_pos_cal, mean_pred_cal = calibration_curve(
+            y_true, y_prob_calibrated, n_bins=n_bins, strategy='uniform'
+        )
+        
+        calibration_data = {
+            'uncalibrated': {
+                'fraction_of_positives': fraction_pos_uncal,
+                'mean_predicted_value': mean_pred_uncal
+            },
+            'calibrated': {
+                'fraction_of_positives': fraction_pos_cal,
+                'mean_predicted_value': mean_pred_cal
+            },
+            'n_bins': n_bins
+        }
+        
+        # Calculate calibration error (deviation from diagonal)
+        uncal_error = np.mean(np.abs(fraction_pos_uncal - mean_pred_uncal))
+        cal_error = np.mean(np.abs(fraction_pos_cal - mean_pred_cal))
+        
+        calibration_data['uncalibrated_error'] = uncal_error
+        calibration_data['calibrated_error'] = cal_error
+        
+        print(f"Uncalibrated model calibration error: {uncal_error:.4f}")
+        print(f"Calibrated model calibration error: {cal_error:.4f}")
+        
+        return calibration_data
+    
+    def create_reliability_diagram(self, calibration_data: Dict[str, Any], 
+                                 save_path: str = "output/reliability_diagram.png") -> None:
+        """
+        Create and save reliability diagram to visualize calibration quality.
+        
+        Args:
+            calibration_data: Dictionary with calibration curve data
+            save_path: Path to save the reliability diagram
+        """
+        print(f"Creating reliability diagram and saving to {save_path}...")
+        
+        # Create the reliability diagram
+        plt.figure(figsize=(10, 8))
+        
+        # Plot perfect calibration line (diagonal)
+        plt.plot([0, 1], [0, 1], 'k--', label='Perfect Calibration', linewidth=2)
+        
+        # Plot uncalibrated model
+        plt.plot(
+            calibration_data['uncalibrated']['mean_predicted_value'],
+            calibration_data['uncalibrated']['fraction_of_positives'],
+            'o-', color='red', linewidth=2, markersize=8,
+            label=f"Uncalibrated (Error: {calibration_data['uncalibrated_error']:.3f})"
+        )
+        
+        # Plot calibrated model
+        plt.plot(
+            calibration_data['calibrated']['mean_predicted_value'],
+            calibration_data['calibrated']['fraction_of_positives'],
+            's-', color='blue', linewidth=2, markersize=8,
+            label=f"Calibrated (Error: {calibration_data['calibrated_error']:.3f})"
+        )
+        
+        # Formatting
+        plt.xlabel('Mean Predicted Probability', fontsize=12)
+        plt.ylabel('Fraction of Positives', fontsize=12)
+        plt.title('Reliability Diagram (Calibration Curve)', fontsize=14, fontweight='bold')
+        plt.legend(fontsize=11)
+        plt.grid(True, alpha=0.3)
+        plt.xlim(0, 1)
+        plt.ylim(0, 1)
+        
+        # Add annotations
+        plt.text(0.02, 0.98, f'Bins: {calibration_data["n_bins"]}', 
+                transform=plt.gca().transAxes, fontsize=10, verticalalignment='top')
+        
+        plt.tight_layout()
+        
+        # Create output directory if it doesn't exist
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save the plot
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()  # Close to free memory
+        
+        print("Reliability diagram saved successfully!")
+    
+    def calculate_brier_score(self, y_true: pd.Series, y_prob_uncalibrated: np.ndarray, 
+                            y_prob_calibrated: np.ndarray) -> Dict[str, float]:
+        """
+        Calculate Brier score to quantify calibration performance.
+        
+        Args:
+            y_true: True binary labels
+            y_prob_uncalibrated: Predicted probabilities from uncalibrated model
+            y_prob_calibrated: Predicted probabilities from calibrated model
+            
+        Returns:
+            Dictionary with Brier scores and improvement metrics
+        """
+        print("Calculating Brier scores for calibration assessment...")
+        
+        # Calculate Brier scores
+        brier_uncalibrated = brier_score_loss(y_true, y_prob_uncalibrated)
+        brier_calibrated = brier_score_loss(y_true, y_prob_calibrated)
+        
+        # Calculate improvement
+        brier_improvement = brier_uncalibrated - brier_calibrated
+        brier_improvement_pct = (brier_improvement / brier_uncalibrated) * 100
+        
+        results = {
+            'brier_uncalibrated': brier_uncalibrated,
+            'brier_calibrated': brier_calibrated,
+            'brier_improvement': brier_improvement,
+            'brier_improvement_pct': brier_improvement_pct
+        }
+        
+        print(f"Uncalibrated Brier Score: {brier_uncalibrated:.4f}")
+        print(f"Calibrated Brier Score: {brier_calibrated:.4f}")
+        print(f"Brier Score Improvement: {brier_improvement:.4f} ({brier_improvement_pct:.1f}%)")
+        
+        return results
+    
+    def validate_probability_bins(self, y_true: pd.Series, y_prob_calibrated: np.ndarray, 
+                                 n_bins: int = 10) -> pd.DataFrame:
+        """
+        Validate that calibrated probabilities align with observed default rates across probability bins.
+        
+        Args:
+            y_true: True binary labels
+            y_prob_calibrated: Predicted probabilities from calibrated model
+            n_bins: Number of probability bins to create
+            
+        Returns:
+            DataFrame with bin-wise validation results
+        """
+        print(f"Validating calibrated probabilities across {n_bins} probability bins...")
+        
+        # Create bins
+        bin_boundaries = np.linspace(0, 1, n_bins + 1)
+        bin_centers = (bin_boundaries[:-1] + bin_boundaries[1:]) / 2
+        
+        # Assign each prediction to a bin
+        bin_indices = np.digitize(y_prob_calibrated, bin_boundaries) - 1
+        bin_indices = np.clip(bin_indices, 0, n_bins - 1)  # Handle edge cases
+        
+        # Calculate statistics for each bin
+        validation_results = []
+        
+        for i in range(n_bins):
+            bin_mask = (bin_indices == i)
+            
+            if np.sum(bin_mask) == 0:
+                continue
+                
+            bin_count = np.sum(bin_mask)
+            observed_rate = np.mean(y_true[bin_mask])
+            predicted_rate = np.mean(y_prob_calibrated[bin_mask])
+            
+            # Calculate confidence intervals for observed rate (Wilson score interval)
+            if bin_count > 0:
+                p = observed_rate
+                n = bin_count
+                z = 1.96  # 95% confidence interval
+                
+                denominator = 1 + z**2/n
+                center = (p + z**2/(2*n)) / denominator
+                width = z * np.sqrt((p*(1-p) + z**2/(4*n)) / n) / denominator
+                
+                ci_lower = max(0, center - width)
+                ci_upper = min(1, center + width)
+            else:
+                ci_lower = ci_upper = np.nan
+            
+            validation_results.append({
+                'bin_number': i + 1,
+                'bin_range': f"[{bin_boundaries[i]:.2f}, {bin_boundaries[i+1]:.2f})",
+                'bin_center': bin_centers[i],
+                'sample_count': bin_count,
+                'observed_default_rate': observed_rate,
+                'predicted_default_rate': predicted_rate,
+                'absolute_error': abs(observed_rate - predicted_rate),
+                'ci_lower': ci_lower,
+                'ci_upper': ci_upper,
+                'within_ci': ci_lower <= predicted_rate <= ci_upper if not np.isnan(ci_lower) else False
+            })
+        
+        validation_df = pd.DataFrame(validation_results)
+        
+        # Calculate overall validation statistics
+        overall_mae = validation_df['absolute_error'].mean()
+        bins_within_ci = validation_df['within_ci'].sum()
+        total_bins = len(validation_df)
+        
+        print(f"Overall Mean Absolute Error: {overall_mae:.4f}")
+        print(f"Bins within 95% CI: {bins_within_ci}/{total_bins} ({bins_within_ci/total_bins*100:.1f}%)")
+        
+        # Display bin validation summary
+        print("\nBin Validation Summary:")
+        print("-" * 100)
+        print(f"{'Bin':<4} {'Range':<15} {'Count':<6} {'Observed':<10} {'Predicted':<10} {'Error':<8} {'In CI':<6}")
+        print("-" * 100)
+        
+        for _, row in validation_df.head(n_bins).iterrows():
+            print(f"{int(row['bin_number']):<4} "
+                  f"{row['bin_range']:<15} "
+                  f"{int(row['sample_count']):<6} "
+                  f"{row['observed_default_rate']:.3f}     "
+                  f"{row['predicted_default_rate']:.3f}      "
+                  f"{row['absolute_error']:.3f}    "
+                  f"{'Yes' if row['within_ci'] else 'No':<6}")
+        
+        return validation_df
+    
+    def evaluate_calibration(self, X_cal: pd.DataFrame, y_cal: pd.Series) -> Dict[str, Any]:
+        """
+        Comprehensive calibration evaluation including all metrics and visualizations.
+        
+        Args:
+            X_cal: Calibration/validation feature matrix
+            y_cal: Calibration/validation target vector
+            
+        Returns:
+            Dictionary with comprehensive calibration evaluation results
+        """
+        if self.model is None or self.calibrated_model is None:
+            raise ValueError("Both uncalibrated and calibrated models must be trained first")
+        
+        print("Performing comprehensive calibration evaluation...")
+        
+        # Scale validation data
+        X_cal_scaled = self.scaler.transform(X_cal)
+        
+        # Get predictions from both models
+        uncalibrated_probs = self.model.predict_proba(X_cal_scaled)[:, 1]
+        calibrated_probs = self.calibrated_model.predict_proba(X_cal_scaled)[:, 1]
+        
+        # Generate calibration curves
+        calibration_data = self.generate_calibration_curve(
+            y_cal, uncalibrated_probs, calibrated_probs
+        )
+        
+        # Create reliability diagram
+        self.create_reliability_diagram(calibration_data)
+        
+        # Calculate Brier scores
+        brier_results = self.calculate_brier_score(
+            y_cal, uncalibrated_probs, calibrated_probs
+        )
+        
+        # Validate probability bins
+        bin_validation = self.validate_probability_bins(y_cal, calibrated_probs)
+        
+        # Calculate AUC for both models
+        uncalibrated_auc = roc_auc_score(y_cal, uncalibrated_probs)
+        calibrated_auc = roc_auc_score(y_cal, calibrated_probs)
+        
+        # Compile comprehensive results
+        evaluation_results = {
+            'calibration_curves': calibration_data,
+            'brier_scores': brier_results,
+            'bin_validation': bin_validation,
+            'auc_scores': {
+                'uncalibrated_auc': uncalibrated_auc,
+                'calibrated_auc': calibrated_auc,
+                'auc_change': calibrated_auc - uncalibrated_auc
+            },
+            'predictions': {
+                'uncalibrated_probs': uncalibrated_probs,
+                'calibrated_probs': calibrated_probs,
+                'true_labels': y_cal.values
+            }
+        }
+        
+        # Store results
+        self.calibration_results = evaluation_results
+        
+        # Print summary
+        print("\n" + "="*80)
+        print("CALIBRATION EVALUATION SUMMARY")
+        print("="*80)
+        print(f"Validation samples: {len(y_cal)}")
+        print(f"Uncalibrated AUC: {uncalibrated_auc:.4f}")
+        print(f"Calibrated AUC: {calibrated_auc:.4f} (Δ: {calibrated_auc - uncalibrated_auc:+.4f})")
+        print(f"Uncalibrated Brier Score: {brier_results['brier_uncalibrated']:.4f}")
+        print(f"Calibrated Brier Score: {brier_results['brier_calibrated']:.4f}")
+        print(f"Brier Score Improvement: {brier_results['brier_improvement_pct']:.1f}%")
+        print(f"Calibration Error (Uncalibrated): {calibration_data['uncalibrated_error']:.4f}")
+        print(f"Calibration Error (Calibrated): {calibration_data['calibrated_error']:.4f}")
+        
+        overall_mae = bin_validation['absolute_error'].mean()
+        bins_within_ci = bin_validation['within_ci'].sum()
+        total_bins = len(bin_validation)
+        print(f"Bin Validation MAE: {overall_mae:.4f}")
+        print(f"Bins within 95% CI: {bins_within_ci}/{total_bins} ({bins_within_ci/total_bins*100:.1f}%)")
+        print("="*80)
+        
+        return evaluation_results
+    
     def interpret_model_coefficients(self, selected_features: List[str]) -> pd.DataFrame:
         """
         Extract and interpret model coefficients.
@@ -663,34 +1083,50 @@ class CreditModelTrainer:
         return evaluation_results
     
     def save_model(self, model_path: str = "output/trained_credit_model.pkl", 
+                  calibrated_model_path: str = "output/calibrated_credit_model.pkl",
                   metadata_path: str = "output/model_metadata.pkl"):
         """
-        Save the trained model and metadata using joblib.
+        Save the trained models (both uncalibrated and calibrated) and metadata using joblib.
         
         Args:
-            model_path: Path to save the model
+            model_path: Path to save the uncalibrated model
+            calibrated_model_path: Path to save the calibrated model
             metadata_path: Path to save metadata
         """
         if self.model is None:
             raise ValueError("Model must be trained first")
         
-        print(f"Saving model to {model_path}...")
+        print(f"Saving uncalibrated model to {model_path}...")
+        print(f"Saving calibrated model to {calibrated_model_path}...")
         
         # Create output directory if it doesn't exist
         Path(model_path).parent.mkdir(parents=True, exist_ok=True)
         
-        # Save model
+        # Save uncalibrated model
         joblib.dump(self.model, model_path)
+        
+        # Save calibrated model (if available)
+        if self.calibrated_model is not None:
+            joblib.dump(self.calibrated_model, calibrated_model_path)
+            print("Calibrated model saved successfully!")
+        else:
+            print("Warning: No calibrated model to save")
         
         # Prepare metadata
         metadata = {
             'model_type': 'LogisticRegression',
+            'has_calibrated_model': self.calibrated_model is not None,
             'best_features': self.best_features,
             'scaler': self.scaler,
             'feature_selection_results': self.feature_selection_results,
             'cv_results': self.cv_results,
+            'calibration_results': self.calibration_results,
             'training_date': datetime.now().isoformat(),
-            'random_state': self.random_state
+            'random_state': self.random_state,
+            'model_paths': {
+                'uncalibrated': model_path,
+                'calibrated': calibrated_model_path if self.calibrated_model is not None else None
+            }
         }
         
         # Save metadata
@@ -702,10 +1138,10 @@ class CreditModelTrainer:
 
 def main():
     """
-    Main function to execute the complete model training pipeline.
+    Main function to execute the complete model training pipeline with calibration.
     """
     print("=" * 80)
-    print("CREDIT RISK MODEL TRAINING PIPELINE")
+    print("CREDIT RISK MODEL TRAINING PIPELINE WITH PROBABILITY CALIBRATION")
     print("=" * 80)
     
     # Initialize trainer
@@ -727,24 +1163,68 @@ def main():
         # Step 5: Hyperparameter optimization
         optimization_results = trainer.hyperparameter_optimization(X, y, trainer.best_features)
         
-        # Step 6: Train final model
-        final_model = trainer.train_final_model(X, y, trainer.best_features, 
+        # Step 6: Split data for calibration evaluation
+        X_train, X_cal, y_train, y_cal = trainer.split_data_for_calibration(
+            X, y, trainer.best_features, test_size=0.2
+        )
+        
+        # Step 7: Train base model on training set
+        print("Training base model on training set...")
+        final_model = trainer.train_final_model(X_train, y_train, trainer.best_features, 
                                               optimization_results['best_params'])
         
-        # Step 7: Interpret coefficients
+        # Step 8: Calibrate model using sigmoid method (Platt scaling)
+        calibrated_model = trainer.calibrate_model(
+            X_train, y_train, X_cal, y_cal, 
+            trainer.best_features, optimization_results['best_params']
+        )
+        
+        # Step 9: Comprehensive calibration evaluation
+        calibration_evaluation = trainer.evaluate_calibration(X_cal, y_cal)
+        
+        # Step 10: Interpret coefficients (from base model)
         coefficient_df = trainer.interpret_model_coefficients(trainer.best_features)
         
-        # Step 8: Evaluate model
-        evaluation_results = trainer.evaluate_model(X, y, trainer.best_features)
+        # Step 11: Evaluate uncalibrated model performance
+        print("\nEvaluating uncalibrated model performance...")
+        evaluation_results = trainer.evaluate_model(X_cal, y_cal, trainer.best_features)
         
-        # Step 9: Save model
+        # Step 12: Save models and results
         trainer.save_model()
         
-        # Save coefficient interpretations
+        # Save additional results
         coefficient_df.to_csv("output/model_coefficients.csv", index=False)
         
+        # Save calibration evaluation results
+        calibration_evaluation['bin_validation'].to_csv("output/calibration_bin_validation.csv", index=False)
+        
+        # Save calibration summary
+        calibration_summary = {
+            'validation_samples': len(y_cal),
+            'uncalibrated_auc': calibration_evaluation['auc_scores']['uncalibrated_auc'],
+            'calibrated_auc': calibration_evaluation['auc_scores']['calibrated_auc'],
+            'auc_change': calibration_evaluation['auc_scores']['auc_change'],
+            'brier_uncalibrated': calibration_evaluation['brier_scores']['brier_uncalibrated'],
+            'brier_calibrated': calibration_evaluation['brier_scores']['brier_calibrated'],
+            'brier_improvement_pct': calibration_evaluation['brier_scores']['brier_improvement_pct'],
+            'calibration_error_uncalibrated': calibration_evaluation['calibration_curves']['uncalibrated_error'],
+            'calibration_error_calibrated': calibration_evaluation['calibration_curves']['calibrated_error']
+        }
+        
+        calibration_summary_df = pd.DataFrame([calibration_summary])
+        calibration_summary_df.to_csv("output/calibration_summary.csv", index=False)
+        
         print("=" * 80)
-        print("MODEL TRAINING COMPLETED SUCCESSFULLY!")
+        print("MODEL TRAINING WITH CALIBRATION COMPLETED SUCCESSFULLY!")
+        print("=" * 80)
+        print("Files saved:")
+        print("- output/trained_credit_model.pkl (uncalibrated model)")
+        print("- output/calibrated_credit_model.pkl (calibrated model for production)")
+        print("- output/model_metadata.pkl (model metadata including calibration results)")
+        print("- output/model_coefficients.csv (coefficient interpretations)")
+        print("- output/reliability_diagram.png (calibration visualization)")
+        print("- output/calibration_bin_validation.csv (bin-wise calibration validation)")
+        print("- output/calibration_summary.csv (calibration performance summary)")
         print("=" * 80)
         
     except Exception as e:
