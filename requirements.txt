@@ -34,6 +34,21 @@ cython>=0.29.0
 loguru>=0.7.0
 tqdm>=4.65.0
 
-# Testing (development)
+# Testing and validation framework
 pytest>=7.4.0
 pytest-cov>=4.1.0
+pytest-html>=3.2.0
+pytest-json-report>=1.5.0
+pytest-xdist>=3.3.0
+pytest-mock>=3.11.0
+pytest-timeout>=2.1.0
+
+# Additional testing utilities
+hypothesis>=6.82.0  # Property-based testing
+factory-boy>=3.3.0  # Test data generation
+faker>=19.3.0       # Fake data generation
+
+# Test reporting and analysis
+coverage>=7.3.0
+pytest-benchmark>=4.0.0
+memory-profiler>=0.60.0
