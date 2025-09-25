@@ -40,7 +40,13 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from category_encoders import WOEEncoder
+try:
+    from category_encoders import WOEEncoder
+    HAS_CATEGORY_ENCODERS = True
+except ImportError:
+    print("Warning: category_encoders not available, using manual WOE implementation")
+    HAS_CATEGORY_ENCODERS = False
+    WOEEncoder = None
 import os
 import sys
 from pathlib import Path
@@ -66,13 +72,21 @@ def load_and_prepare_data():
     print(f"Loaded {len(df):,} records with {df.shape[1]} columns")
     
     # Clean monetary fields (remove $ and commas, convert to float)
-    monetary_cols = ['monthly_income', 'loan_amount']
+    monetary_cols = ['monthly_income', 'loan_amount', 'monthly_payment', 'existing_monthly_debt', 'total_monthly_debt']
     for col in monetary_cols:
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace('$', '').str.replace(',', '').astype(float)
     
     # Convert application_date to datetime
-    df['application_date'] = pd.to_datetime(df['application_date'], format='%d%b%Y')
+    try:
+        df['application_date'] = pd.to_datetime(df['application_date'], format='%d%b%Y')
+    except ValueError:
+        # Try alternative formats
+        try:
+            df['application_date'] = pd.to_datetime(df['application_date'])
+        except:
+            print("Warning: Could not parse application_date, using original format")
+            pass
     
     print("Data loaded and cleaned successfully")
     return df
@@ -91,10 +105,10 @@ def create_derived_features(df):
     
     df = df.copy()
     
-    # Financial ratios
-    df['payment_to_income_ratio'] = (df['monthly_payment'] / df['monthly_income']) * 100
-    df['loan_to_income_ratio'] = df['loan_amount'] / df['annual_income']
-    df['debt_service_coverage'] = df['monthly_income'] / df['total_monthly_debt']
+    # Financial ratios  
+    df['payment_to_income_ratio'] = (df['monthly_payment'] / df['monthly_income'].replace(0, 1)) * 100
+    df['loan_to_income_ratio'] = df['loan_amount'] / df['annual_income'].replace(0, 1)
+    df['debt_service_coverage'] = df['monthly_income'] / df['total_monthly_debt'].replace(0, 1)  # Avoid division by zero
     
     # Employment stability score
     emp_stability_map = {
@@ -120,8 +134,8 @@ def create_derived_features(df):
                            labels=[1, 2, 3, 4, 5, 6])
     df['age_group'] = df['age_group'].astype(int)
     
-    # Income stability indicator
-    df['income_stability'] = (df['employment_years'] / df['age']) * 100
+    # Income stability indicator  
+    df['income_stability'] = (df['employment_years'] / df['age'].replace(0, 1)) * 100
     
     # Credit behavior score
     df['credit_util_score'] = pd.cut(df['credit_utilization'], 
@@ -146,10 +160,15 @@ def create_derived_features(df):
     
     # Loan affordability score
     df['affordability_score'] = ((df['monthly_income'] - df['total_monthly_debt']) / 
-                                df['monthly_payment'])
+                                df['monthly_payment'].replace(0, 1))  # Avoid division by zero
     
     # Credit age to loan ratio
-    df['credit_to_loan_years'] = df['credit_history_years'] / (df['loan_term_months'] / 12)
+    df['credit_to_loan_years'] = df['credit_history_years'] / ((df['loan_term_months'] / 12).replace(0, 1))
+    
+    # Handle any infinite or NaN values created by division operations
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    df[numeric_cols] = df[numeric_cols].replace([np.inf, -np.inf], np.nan)
+    df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].median())
     
     print("Derived features created successfully")
     return df
@@ -214,9 +233,29 @@ def create_woe_transformations(df_train, df_val=None):
     
     for var in categorical_vars:
         if var in df_train.columns:
-            encoder = WOEEncoder()
-            df_train[f'woe_{var}'] = encoder.fit_transform(df_train[var], df_train['default_flag'])
-            woe_encoders[var] = encoder
+            if HAS_CATEGORY_ENCODERS:
+                encoder = WOEEncoder()
+                df_train[f'woe_{var}'] = encoder.fit_transform(df_train[var], df_train['default_flag'])
+                woe_encoders[var] = encoder
+            else:
+                # Manual WOE calculation fallback
+                woe_dict = {}
+                total_bad = df_train['default_flag'].sum()
+                total_good = len(df_train) - total_bad
+                
+                for category in df_train[var].unique():
+                    cat_data = df_train[df_train[var] == category]
+                    bad_count = cat_data['default_flag'].sum()
+                    good_count = len(cat_data) - bad_count
+                    
+                    bad_rate = max(bad_count / total_bad, 0.001) if total_bad > 0 else 0.001
+                    good_rate = max(good_count / total_good, 0.001) if total_good > 0 else 0.001
+                    
+                    woe = np.log(good_rate / bad_rate)
+                    woe_dict[category] = woe
+                
+                df_train[f'woe_{var}'] = df_train[var].map(woe_dict)
+                woe_encoders[var] = woe_dict
     
     # Transform validation data if provided
     transformed_val = None
@@ -227,7 +266,11 @@ def create_woe_transformations(df_train, df_val=None):
         
         for var in categorical_vars:
             if var in df_val.columns:
-                df_val[f'woe_{var}'] = woe_encoders[var].transform(df_val[var])
+                if HAS_CATEGORY_ENCODERS and hasattr(woe_encoders[var], 'transform'):
+                    df_val[f'woe_{var}'] = woe_encoders[var].transform(df_val[var])
+                else:
+                    # Use manual WOE dictionary
+                    df_val[f'woe_{var}'] = df_val[var].map(woe_encoders[var]).fillna(0)
         
         transformed_val = df_val
     
@@ -430,31 +473,51 @@ def main():
     
     try:
         # Step 1: Load and prepare data
+        print("Step 1: Loading and preparing data...")
         df = load_and_prepare_data()
-        
-        # Update todo
-        print("\n✓ Data loaded and prepared successfully")
+        print(f"✓ Loaded {len(df)} records with {len(df.columns)} columns")
         
         # Step 2: Create derived features
+        print("\nStep 2: Creating derived features...")
         df = create_derived_features(df)
-        df = create_interaction_terms(df)
-        df = create_binned_features(df)
-        df = create_dummy_variables(df)
+        print("✓ Derived features created")
         
-        print("\n✓ All feature engineering steps completed")
+        df = create_interaction_terms(df)
+        print("✓ Interaction terms created")
+        
+        df = create_binned_features(df)
+        print("✓ Binned features created")
+        
+        df = create_dummy_variables(df)
+        print("✓ Dummy variables created")
+        
+        print(f"Dataset now has {len(df.columns)} columns")
         
         # Step 3: Train/validation split with stratification
-        print("\nPerforming train/validation split (70/30)...")
+        print("\nStep 3: Performing train/validation split (70/30)...")
         
         X = df.drop(['default_flag'], axis=1)
         y = df['default_flag']
         
-        X_train, X_val, y_train, y_val = train_test_split(
-            X, y,
-            test_size=0.3,
-            random_state=42,
-            stratify=y
-        )
+        print(f"Target variable distribution: {y.value_counts().to_dict()}")
+        print(f"Default rate: {y.mean():.3f}")
+        
+        # Check if we have enough samples in each class for stratification
+        if y.sum() < 2 or (len(y) - y.sum()) < 2:
+            print("Warning: Not enough samples in each class for stratification, using random split")
+            X_train, X_val, y_train, y_val = train_test_split(
+                X, y,
+                test_size=0.3,
+                random_state=42,
+                stratify=None
+            )
+        else:
+            X_train, X_val, y_train, y_val = train_test_split(
+                X, y,
+                test_size=0.3,
+                random_state=42,
+                stratify=y
+            )
         
         # Recombine with target variable
         df_train = pd.concat([X_train, y_train], axis=1)
@@ -464,9 +527,12 @@ def main():
         print(f"Validation set: {len(df_val):,} records ({y_val.mean():.3f} default rate)")
         
         # Step 4: Apply WOE transformations
+        print("\nStep 4: Applying WOE transformations...")
         df_train_woe, df_val_woe, woe_encoders = create_woe_transformations(df_train, df_val)
+        print("✓ WOE transformations completed")
         
         # Step 5: Feature scaling
+        print("\nStep 5: Applying feature scaling...")
         features_to_scale = [
             'age', 'employment_years', 'monthly_income', 'annual_income', 'loan_amount',
             'credit_utilization', 'debt_to_income_ratio', 'num_late_payments',
@@ -477,13 +543,16 @@ def main():
         df_train_final, df_val_final, scaler = apply_feature_scaling(
             df_train_woe, df_val_woe, features_to_scale
         )
+        print("✓ Feature scaling completed")
         
         # Step 6: Select final features
+        print("\nStep 6: Selecting final features...")
         model_features_train = select_final_features(df_train_final)
         model_features_validation = select_final_features(df_val_final)
+        print("✓ Feature selection completed")
         
         # Step 7: Export to CSV files
-        print("\nExporting feature-engineered datasets...")
+        print("\nStep 7: Exporting feature-engineered datasets...")
         
         # Create output directory if it doesn't exist
         output_dir = Path('output')
@@ -496,8 +565,8 @@ def main():
         model_features_train.to_csv(train_path, index=False)
         model_features_validation.to_csv(val_path, index=False)
         
-        print(f"Training features exported to: {train_path}")
-        print(f"Validation features exported to: {val_path}")
+        print(f"✓ Training features exported to: {train_path}")
+        print(f"✓ Validation features exported to: {val_path}")
         
         # Step 8: Validation checks
         print("\n" + "="*50)
@@ -514,8 +583,8 @@ def main():
         
         print(f"\nSample of engineered features:")
         feature_cols = [col for col in model_features_train.columns 
-                       if col not in ['customer_id', 'default_flag']]
-        print(model_features_train[feature_cols[:10]].describe())
+                       if col not in ['customer_id', 'default_flag']][:10]
+        print(model_features_train[feature_cols].describe())
         
         print("\n✓ Feature engineering completed successfully!")
         print("✓ Datasets ready for model training")
@@ -523,7 +592,10 @@ def main():
         return model_features_train, model_features_validation
         
     except Exception as e:
+        import traceback
         print(f"\n❌ Error during feature engineering: {str(e)}")
+        print("Full traceback:")
+        traceback.print_exc()
         raise
 
 if __name__ == "__main__":
