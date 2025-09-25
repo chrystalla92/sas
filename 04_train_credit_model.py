@@ -626,8 +626,9 @@ def generate_scored_applications(train_df, val_df, lr_results, dt_results, calib
             'customer_id': all_data['customer_id'],
             'default_flag': all_data['default_flag'],
             
-            # Model predictions
-            'logistic_probability': all_lr_pred,
+            # Model predictions (using SAS-compatible naming)
+            'pd_logistic': all_cal_pred,  # Use calibrated predictions as primary
+            'logistic_probability': all_lr_pred,  # Keep original for compatibility
             'decision_tree_probability': all_dt_pred,
             'calibrated_probability': all_cal_pred,
             
