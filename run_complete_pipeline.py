@@ -308,7 +308,7 @@ class CreditRiskPipeline:
                 print(f"  - Models trained: Logistic Regression, Decision Tree")
                 print(f"  - Calibration completed: {calibration_results is not None}")
                 print(f"  - Scored applications: {len(scored_apps) if scored_apps is not None else 0:,}")
-                if performance_summary:
+                if performance_summary is not None and not performance_summary.empty:
                     print(f"  - Performance metrics calculated")
         
         # Model Validation Results
