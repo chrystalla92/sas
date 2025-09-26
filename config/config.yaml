@@ -88,7 +88,7 @@ model_training:
   decision_tree:
     max_depth: 10
     min_samples_leaf: 50
-    min_samples_split: 100
+    min_samples_split: 2
     criterion: "gini"
     max_features: null
     class_weight: "balanced"

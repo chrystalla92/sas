@@ -316,7 +316,7 @@ def train_decision_tree(X_train, y_train, X_val, y_val, feature_names):
         min_samples_leaf=50,  # Specified in task requirements
         criterion='gini',  # Specified in task requirements
         random_state=42,
-        min_samples_split=100,  # Conservative splitting
+        min_samples_split=2,  # Updated splitting parameter
         max_features=None  # Use all features
     )
     
