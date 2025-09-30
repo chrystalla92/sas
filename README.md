@@ -5,7 +5,6 @@ A complete SAS-based credit risk scoring system for evaluating loan applications
 ## Overview
 
 This repository contains a production-ready credit risk scoring model that:
-- Generates synthetic credit application data
 - Performs feature engineering and data transformation
 - Trains a logistic regression model for default prediction
 - Validates model performance with comprehensive metrics
@@ -14,12 +13,14 @@ This repository contains a production-ready credit risk scoring model that:
 ## Project Structure
 
 ```
-├── output/
-│   └── generate_credit_data.sas     # Generate synthetic training/validation data
+.
 ├── feature_engineering.sas          # Feature engineering and transformation
 ├── train.sas                        # Train logistic regression model
 ├── metrics_calculation.sas          # Comprehensive model validation
-└── predict.sas                      # Score new applications
+├── predict.sas                      # Score new applications
+├── credit_train.csv                 # Training dataset (7,000 records)
+├── credit_validation.csv            # Validation dataset (3,000 records)
+└── model_coefficients.csv           # Trained model coefficients
 ```
 
 ## Prerequisites
@@ -29,30 +30,19 @@ This repository contains a production-ready credit risk scoring model that:
 
 ## Quick Start
 
-### 1. Generate Training Data
-
-```sas
-%include "output/generate_credit_data.sas";
-```
-
-**Outputs:**
-- `credit_train.csv` (7,000 records)
-- `credit_validation.csv` (3,000 records)
-- `credit_applications_full.csv` (10,000 records)
-
-### 2. Feature Engineering
+### 1. Feature Engineering
 
 ```sas
 %include "feature_engineering.sas";
 ```
 
 **Inputs:**
-- `credit_train.csv`
-- `credit_validation.csv`
+- `credit_train.csv` (in root directory)
+- `credit_validation.csv` (in root directory)
 
 **Outputs:**
-- `model_features_train.csv`
-- `model_features_validation.csv`
+- `/home/u64352077/sasuser.v94/output/model_features_train.csv`
+- `/home/u64352077/sasuser.v94/output/model_features_validation.csv`
 
 **Features Created:**
 - Financial ratios (payment-to-income, loan-to-income, debt service coverage)
@@ -63,21 +53,21 @@ This repository contains a production-ready credit risk scoring model that:
 - One-hot encoded categorical variables
 - Standardized continuous variables
 
-### 3. Train Model
+### 2. Train Model
 
 ```sas
 %include "train.sas";
 ```
 
 **Inputs:**
-- `model_features_train.csv`
-- `model_features_validation.csv`
+- `/home/u64352077/sasuser.v94/output/model_features_train.csv`
+- `/home/u64352077/sasuser.v94/output/model_features_validation.csv`
 
 **Outputs:**
-- `risk_scores_train.csv`
-- `risk_scores_validation.csv`
-- `final_model_output.csv`
-- `model_coefficients.csv`
+- `/home/u64352077/sasuser.v94/output/risk_scores_train.csv`
+- `/home/u64352077/sasuser.v94/output/risk_scores_validation.csv`
+- `/home/u64352077/sasuser.v94/output/final_model_output.csv`
+- `/home/u64352077/sasuser.v94/output/model_coefficients.csv`
 - Model stored in `work.logit_model`
 
 **Model Features:**
@@ -86,23 +76,23 @@ This repository contains a production-ready credit risk scoring model that:
 - Risk grades: A-F
 - Risk-based pricing (interest rates)
 
-### 4. Validate Model
+### 3. Validate Model
 
 ```sas
 %include "metrics_calculation.sas";
 ```
 
 **Inputs:**
-- `risk_scores_train.csv`
-- `risk_scores_validation.csv`
+- `/home/u64352077/sasuser.v94/output/risk_scores_train.csv`
+- `/home/u64352077/sasuser.v94/output/risk_scores_validation.csv`
 
 **Outputs:**
-- `validation_summary.csv` - Overall model performance
-- `decile_analysis.csv` - Lift and capture rates by decile
-- `threshold_analysis.csv` - Metrics at different thresholds
-- `ks_statistic.csv` - Kolmogorov-Smirnov statistic
-- `calibration_plot.csv` - Predicted vs actual probabilities
-- `model_performance_metrics.csv` - Comprehensive metrics
+- `/home/u64352077/sasuser.v94/output/validation_summary.csv` - Overall model performance
+- `/home/u64352077/sasuser.v94/output/decile_analysis.csv` - Lift and capture rates by decile
+- `/home/u64352077/sasuser.v94/output/threshold_analysis.csv` - Metrics at different thresholds
+- `/home/u64352077/sasuser.v94/output/ks_statistic.csv` - Kolmogorov-Smirnov statistic
+- `/home/u64352077/sasuser.v94/output/calibration_plot.csv` - Predicted vs actual probabilities
+- `/home/u64352077/sasuser.v94/output/model_performance_metrics.csv` - Comprehensive metrics
 
 **Validation Metrics:**
 - ROC curve and AUC
@@ -114,18 +104,18 @@ This repository contains a production-ready credit risk scoring model that:
 - Population Stability Index (PSI)
 - Calibration plots
 
-### 5. Score New Applications
+### 4. Score New Applications
 
 ```sas
 %include "predict.sas";
 ```
 
 **Inputs:**
-- `new_applications.csv` (customer applications)
+- `/home/u64352077/sasuser.v94/output/new_applications.csv` (customer applications)
 - Model from training script (`work.logit_model`)
 
 **Outputs:**
-- `new_predictions.csv`
+- `/home/u64352077/sasuser.v94/output/new_predictions.csv`
 
 **Output Columns:**
 - `customer_id` - Customer identifier
@@ -139,23 +129,23 @@ This repository contains a production-ready credit risk scoring model that:
 ## Data Flow
 
 ```
-output/generate_credit_data.sas
-    ↓
-credit_train.csv, credit_validation.csv
+credit_train.csv, credit_validation.csv (root directory)
     ↓
 feature_engineering.sas
     ↓
-model_features_train.csv, model_features_validation.csv
+model_features_train.csv, model_features_validation.csv (output/)
     ↓
 train.sas
     ↓
-risk_scores_train.csv, risk_scores_validation.csv, work.logit_model
+risk_scores_train.csv, risk_scores_validation.csv, work.logit_model (output/)
     ↓
 metrics_calculation.sas (validation metrics)
     ↓
-predict.sas + new_applications.csv
+validation_summary.csv, decile_analysis.csv, etc. (output/)
     ↓
-new_predictions.csv
+predict.sas + new_applications.csv (output/)
+    ↓
+new_predictions.csv (output/)
 ```
 
 ## Model Performance
@@ -281,26 +271,30 @@ pd_logistic = 1 / (1 + exp(-predicted_logit));
 ### Issue: Training and validation sets have different columns
 **Solution**: Ensure feature engineering script applies the same transformations to both datasets
 
-## Output Directory Structure
+## Directory Structure
 
 ```
-output/
+Root directory:
 ├── credit_train.csv                    # Training data (7,000 records)
 ├── credit_validation.csv               # Validation data (3,000 records)
-├── credit_applications_full.csv        # Full dataset (10,000 records)
+├── model_coefficients.csv              # Model parameters (in root)
+└── *.sas                               # SAS scripts
+
+Output directory (/home/u64352077/sasuser.v94/output/):
 ├── model_features_train.csv            # Engineered training features
 ├── model_features_validation.csv       # Engineered validation features
 ├── risk_scores_train.csv               # Scored training set
 ├── risk_scores_validation.csv          # Scored validation set
 ├── final_model_output.csv              # Final model results
-├── model_coefficients.csv              # Model parameters
+├── model_coefficients.csv              # Model parameters (exported)
 ├── validation_summary.csv              # Overall validation metrics
 ├── decile_analysis.csv                 # Decile lift analysis
 ├── threshold_analysis.csv              # Performance at different thresholds
 ├── ks_statistic.csv                    # KS statistic
 ├── calibration_plot.csv                # Calibration data
 ├── model_performance_metrics.csv       # Comprehensive metrics
-└── new_predictions.csv                 # Predictions for new applications
+├── new_applications.csv                # Input: new customer applications
+└── new_predictions.csv                 # Output: predictions for new applications
 ```
 
 ## Pipeline Execution
@@ -308,18 +302,22 @@ output/
 To run the complete pipeline:
 
 ```sas
-/* Step 1: Generate data */
-%include "output/generate_credit_data.sas";
-
-/* Step 2: Feature engineering */
+/* Step 1: Feature engineering (requires credit_train.csv and credit_validation.csv) */
 %include "feature_engineering.sas";
 
-/* Step 3: Train model */
+/* Step 2: Train model */
 %include "train.sas";
 
-/* Step 4: Validate model */
+/* Step 3: Validate model */
 %include "metrics_calculation.sas";
 
-/* Step 5: Score new applications (requires new_applications.csv) */
+/* Step 4: Score new applications (requires new_applications.csv) */
 %include "predict.sas";
 ```
+
+## Notes
+
+- The training and validation datasets (`credit_train.csv`, `credit_validation.csv`) are located in the repository root directory
+- All intermediate and output files are written to `/home/u64352077/sasuser.v94/output/`
+- The model is stored as an item store in `work.logit_model` during the SAS session
+- Model coefficients are exported to both the root directory and the output directory
