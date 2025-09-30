@@ -21,7 +21,7 @@ run;
 data work.credit_applications;
    /* Customer demographics */
    length customer_id $10 employment_status $20 education $20 home_ownership $10;
-   format application_date date9. monthly_income dollar12.2 loan_amount dollar12.2;
+   format application_date date9.;
 
    do i = 1 to 10000;
       /* Generate unique customer ID */
@@ -199,9 +199,31 @@ data work.credit_data_full;
    set work.credit_applications;
 run;
 
+/* Export all datasets to CSV */
+/* Export full credit applications dataset */
+proc export data=work.credit_applications
+   outfile="/home/u64352077/sasuser.v94/output/credit_applications_full.csv"
+   dbms=csv
+   replace;
+run;
+
+/* Export training dataset */
+proc export data=work.credit_train
+   outfile="/home/u64352077/sasuser.v94/output/credit_train.csv"
+   dbms=csv
+   replace;
+run;
+
+/* Export validation dataset */
+proc export data=work.credit_validation
+   outfile="/home/u64352077/sasuser.v94/output/credit_validation.csv"
+   dbms=csv
+   replace;
+run;
+
 /* Export sample for review */
 proc export data=work.credit_applications(obs=100)
-   outfile="/home/u64345824/sasuser.v94/bank_risk_credit_scoring/output/credit_data_sample.csv"
+   outfile="/home/u64352077/sasuser.v94/output/credit_data_sample.csv"
    dbms=csv
    replace;
 run;

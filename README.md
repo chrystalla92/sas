@@ -1,319 +1,325 @@
-# Bank Credit Risk Scoring Model with SAS
+# Bank Credit Risk Scoring Model
 
-This project implements a comprehensive credit risk scoring system for bank loan applications using SAS procedures. The workflow covers synthetic data generation, exploratory analysis, feature engineering, model training, validation, production scoring, and project archiving.
+A complete SAS-based credit risk scoring system for evaluating loan applications and predicting default probability.
 
-## Directory Structure
+## Overview
+
+This repository contains a production-ready credit risk scoring model that:
+- Generates synthetic credit application data
+- Performs feature engineering and data transformation
+- Trains a logistic regression model for default prediction
+- Validates model performance with comprehensive metrics
+- Scores new applications with risk grades and recommendations
+
+## Project Structure
 
 ```
-bank_risk_credit_scoring/
-├── output/                           # Directory for outputs and reports
-├── 01_generate_credit_data.sas      # Synthetic data generation
-├── 02_data_exploration.sas          # Exploratory data analysis
-├── 03_feature_engineering.sas       # Feature creation and transformation
-├── 04_train_credit_model.sas        # Model training (decision tree)
-├── 05_model_validation.sas          # Model performance evaluation
-├── 06_score_new_customers.sas       # Production scoring pipeline
-├── 07_archive_project.sas           # Project backup and documentation
-├── tree_model.sas                    # Generated scoring code from HPSPLIT
-└── README.md                         # This file
+├── output/
+│   └── generate_credit_data.sas     # Generate synthetic training/validation data
+├── feature_engineering.sas          # Feature engineering and transformation
+├── train.sas                        # Train logistic regression model
+├── metrics_calculation.sas          # Comprehensive model validation
+└── predict.sas                      # Score new applications
 ```
 
 ## Prerequisites
 
-- SAS Base with the following procedures available:
-  - PROC HPSPLIT (High-Performance Decision Trees)
-  - PROC HPFOREST (Random Forest - optional)
-  - PROC LOGISTIC (Logistic Regression)
-  - PROC MEANS/FREQ/UNIVARIATE (Statistical Analysis)
-  - PROC SGPLOT (Visualization)
-- Sufficient memory for processing 10,000+ records
-- Write access to output directory
+- SAS 9.4 or later
+- Write access to: `/home/u64352077/sasuser.v94/output/`
 
-## Workflow Overview
+## Quick Start
 
-### Step 1: Generate Synthetic Credit Data (`01_generate_credit_data.sas`)
-
-This script creates a realistic synthetic dataset of 10,000 bank loan applications with controlled relationships between features and default risk.
-
-**What it does:**
-- Generates customer demographics (age, income, employment status, education)
-- Creates credit history metrics (credit score, utilization, payment history)
-- Simulates financial obligations (loan amounts, debt-to-income ratios)
-- Produces a binary default indicator based on risk factors
-- Exports data for analysis and model training
-
-**Key outputs:**
-- `work.credit_applications` - Full synthetic dataset with 10,000 records
-- `work.data_summary` - Statistical summary of generated data
-- CSV export of the dataset for external analysis
-
-**Generated Features:**
-- **Demographics:** age, employment_years, employment_status, education, home_ownership
-- **Financial:** monthly_income, loan_amount, debt_to_income_ratio
-- **Credit History:** credit_score, credit_utilization, num_credit_lines, months_since_delinquency
-- **Risk Indicators:** previous_defaults, payment_history_score
-- **Target:** default_flag (0=good, 1=default)
-
-### Step 2: Data Exploration (`02_data_exploration.sas`)
-
-This script performs comprehensive exploratory data analysis to understand data patterns and relationships.
-
-**What it does:**
-- Calculates univariate statistics for all variables
-- Analyzes default rates across categorical segments
-- Creates correlation matrix for numeric features
-- Generates distribution plots and histograms
-- Identifies potential data quality issues
-
-**Analysis Components:**
-- **Univariate Analysis:** Distribution statistics for all variables
-- **Bivariate Analysis:** Default rates by categorical features
-- **Correlation Analysis:** Relationships between numeric predictors
-- **Visual Analysis:** Histograms, box plots, and bar charts
-
-**Key outputs:**
-- `work.numeric_summary` - Summary statistics for numeric variables
-- `work.categorical_summary` - Frequency tables for categorical variables
-- `work.default_analysis` - Default rates by various segments
-- Multiple visualization plots in SAS Output
-
-### Step 3: Feature Engineering (`03_feature_engineering.sas`)
-
-This script creates advanced features and performs data transformations to improve model performance.
-
-**What it does:**
-- Creates risk flag indicators based on business rules
-- Generates interaction terms between key variables
-- Performs binning of continuous variables
-- Creates dummy variables for categorical features
-- Normalizes numeric features for modeling
-
-**Engineered Features:**
-- **Risk Flags:**
-  - `high_dti_flag` - Debt-to-income > 0.45
-  - `low_credit_flag` - Credit score < 600
-  - `high_utilization_flag` - Credit utilization > 0.8
-  - `recent_delinquency_flag` - Delinquency within 12 months
-- **Composite Scores:**
-  - `total_risk_flags` - Sum of all risk indicators
-  - `credit_income_ratio` - Credit score / income interaction
-- **Categorical Encodings:**
-  - One-hot encoding for employment_status
-  - Ordinal encoding for education level
-
-**Key outputs:**
-- `work.model_data` - Dataset with engineered features
-- `work.feature_importance` - Initial feature importance metrics
-- Partitioned datasets for training (70%) and validation (30%)
-
-### Step 4: Train Credit Model (`04_train_credit_model.sas`)
-
-This script trains a decision tree model using PROC HPSPLIT for credit risk prediction.
-
-**What it does:**
-- Splits data into training and validation sets
-- Trains a decision tree with optimal parameters
-- Performs automatic variable selection
-- Generates scoring code for production use
-- Evaluates initial model performance
-
-**Model Configuration:**
-- **Algorithm:** Decision Tree (HPSPLIT)
-- **Max Depth:** 10 levels
-- **Min Observations:** 50 per leaf
-- **Split Criterion:** Gini impurity
-- **Pruning:** Cost-complexity with cross-validation
-
-**Key outputs:**
-- `work.credit_model` - Trained model object
-- `tree_model.sas` - Auto-generated scoring code
-- `work.train_scored` - Training predictions
-- `work.valid_scored` - Validation predictions
-- Variable importance ranking
-
-### Step 5: Model Validation (`05_model_validation.sas`)
-
-This script performs comprehensive model validation and performance assessment.
-
-**What it does:**
-- Calculates classification metrics (accuracy, precision, recall, F1)
-- Generates ROC curves and calculates AUC
-- Creates confusion matrices for different thresholds
-- Performs lift and gain chart analysis
-- Conducts stability analysis across segments
-
-**Performance Metrics:**
-- **Classification Metrics:**
-  - Overall accuracy
-  - Sensitivity (recall) for defaults
-  - Specificity for non-defaults
-  - Precision and F1 score
-- **Ranking Metrics:**
-  - AUC-ROC score
-  - Gini coefficient
-  - KS statistic
-- **Business Metrics:**
-  - Lift at various deciles
-  - Cumulative gain
-  - Expected loss estimates
-
-**Key outputs:**
-- `work.model_metrics` - Complete performance metrics
-- `work.confusion_matrix` - Classification results at optimal threshold
-- `work.roc_data` - ROC curve coordinates
-- `work.lift_chart` - Lift and gain analysis
-- Performance visualization plots
-
-### Step 6: Score New Customers (`06_score_new_customers.sas`)
-
-This script implements the production scoring pipeline for new loan applications.
-
-**What it does:**
-- Generates 100 new synthetic applications for scoring
-- Applies the same feature engineering pipeline
-- Scores using the trained model
-- Assigns risk categories based on probability thresholds
-- Creates approval recommendations
-
-**Risk Categorization:**
-- **Low Risk:** Default probability < 0.1 → Auto-approve
-- **Medium Risk:** Default probability 0.1-0.3 → Manual review
-- **High Risk:** Default probability > 0.3 → Decline/require additional documentation
-
-**Key outputs:**
-- `work.new_applications` - New customer data
-- `work.scored_applications` - Scored results with probabilities
-- `work.risk_summary` - Distribution of risk categories
-- `work.approval_decisions` - Final lending recommendations
-- CSV exports for integration with other systems
-
-### Step 7: Archive Project (`07_archive_project.sas`)
-
-This script creates comprehensive documentation and backup of the entire project.
-
-**What it does:**
-- Lists all project files and their purposes
-- Creates a manifest of datasets and outputs
-- Documents model parameters and performance
-- Generates a project summary report
-- Attempts to create backup (within SAS constraints)
-
-**Documentation Components:**
-- File inventory with descriptions
-- Dataset catalog with record counts
-- Model configuration summary
-- Performance metrics archive
-- Timestamp and version information
-
-**Key outputs:**
-- `work.project_manifest` - Complete file listing
-- `work.model_documentation` - Model specifications
-- Project summary report in log
-- Backup instructions for manual archiving
-
-## Running the Pipeline
-
-Execute the scripts in sequence:
+### 1. Generate Training Data
 
 ```sas
-/* Step 1: Generate synthetic credit data */
-%include "/path/to/bank_risk_credit_scoring/01_generate_credit_data.sas";
-
-/* Step 2: Explore and understand the data */
-%include "/path/to/bank_risk_credit_scoring/02_data_exploration.sas";
-
-/* Step 3: Create features for modeling */
-%include "/path/to/bank_risk_credit_scoring/03_feature_engineering.sas";
-
-/* Step 4: Train the credit risk model */
-%include "/path/to/bank_risk_credit_scoring/04_train_credit_model.sas";
-
-/* Step 5: Validate model performance */
-%include "/path/to/bank_risk_credit_scoring/05_model_validation.sas";
-
-/* Step 6: Score new applications */
-%include "/path/to/bank_risk_credit_scoring/06_score_new_customers.sas";
-
-/* Step 7: Archive and document project */
-%include "/path/to/bank_risk_credit_scoring/07_archive_project.sas";
+%include "output/generate_credit_data.sas";
 ```
 
-## Expected Results
+**Outputs:**
+- `credit_train.csv` (7,000 records)
+- `credit_validation.csv` (3,000 records)
+- `credit_applications_full.csv` (10,000 records)
 
-1. **Data Generation**: 10,000 synthetic loan applications with ~20% default rate
-2. **Model Training**: Decision tree with 75-80% accuracy on validation set
-3. **Risk Scoring**: Classification of new applications into risk categories
-4. **Business Impact**: Automated approval decisions for low-risk applications
+### 2. Feature Engineering
 
-## Performance Considerations
+```sas
+%include "feature_engineering.sas";
+```
 
-- The model uses decision trees for interpretability over black-box methods
-- Feature engineering significantly improves model performance (~10% lift)
-- Validation uses 30% holdout to ensure robust performance estimates
-- Production scoring processes ~1000 applications per second
+**Inputs:**
+- `credit_train.csv`
+- `credit_validation.csv`
+
+**Outputs:**
+- `model_features_train.csv`
+- `model_features_validation.csv`
+
+**Features Created:**
+- Financial ratios (payment-to-income, loan-to-income, debt service coverage)
+- Employment stability scores
+- Credit quality scores
+- Risk flags (high DTI, low credit, high utilization, etc.)
+- Weight of Evidence (WOE) transformations
+- One-hot encoded categorical variables
+- Standardized continuous variables
+
+### 3. Train Model
+
+```sas
+%include "train.sas";
+```
+
+**Inputs:**
+- `model_features_train.csv`
+- `model_features_validation.csv`
+
+**Outputs:**
+- `risk_scores_train.csv`
+- `risk_scores_validation.csv`
+- `final_model_output.csv`
+- `model_coefficients.csv`
+- Model stored in `work.logit_model`
+
+**Model Features:**
+- Logistic regression with stepwise selection
+- Risk score scale: 300-850 (FICO-like)
+- Risk grades: A-F
+- Risk-based pricing (interest rates)
+
+### 4. Validate Model
+
+```sas
+%include "metrics_calculation.sas";
+```
+
+**Inputs:**
+- `risk_scores_train.csv`
+- `risk_scores_validation.csv`
+
+**Outputs:**
+- `validation_summary.csv` - Overall model performance
+- `decile_analysis.csv` - Lift and capture rates by decile
+- `threshold_analysis.csv` - Metrics at different thresholds
+- `ks_statistic.csv` - Kolmogorov-Smirnov statistic
+- `calibration_plot.csv` - Predicted vs actual probabilities
+- `model_performance_metrics.csv` - Comprehensive metrics
+
+**Validation Metrics:**
+- ROC curve and AUC
+- Gini coefficient
+- KS statistic
+- Confusion matrix (multiple thresholds)
+- Precision, Recall, F1-score
+- Decile analysis and lift charts
+- Population Stability Index (PSI)
+- Calibration plots
+
+### 5. Score New Applications
+
+```sas
+%include "predict.sas";
+```
+
+**Inputs:**
+- `new_applications.csv` (customer applications)
+- Model from training script (`work.logit_model`)
+
+**Outputs:**
+- `new_predictions.csv`
+
+**Output Columns:**
+- `customer_id` - Customer identifier
+- `pd_logistic` - Probability of default (0-1)
+- `credit_risk_score` - Risk score (300-850)
+- `risk_grade` - Risk grade (A-F)
+- `recommendation` - Approve/Review/Decline
+- `interest_rate` - Suggested interest rate
+- Additional credit metrics
+
+## Data Flow
+
+```
+output/generate_credit_data.sas
+    ↓
+credit_train.csv, credit_validation.csv
+    ↓
+feature_engineering.sas
+    ↓
+model_features_train.csv, model_features_validation.csv
+    ↓
+train.sas
+    ↓
+risk_scores_train.csv, risk_scores_validation.csv, work.logit_model
+    ↓
+metrics_calculation.sas (validation metrics)
+    ↓
+predict.sas + new_applications.csv
+    ↓
+new_predictions.csv
+```
+
+## Model Performance
+
+Expected performance metrics:
+- **AUC**: 0.70-0.80
+- **KS Statistic**: 0.30-0.40
+- **Gini Coefficient**: 0.40-0.60
+- **PSI**: < 0.25 (stable)
+
+## Risk Grading System
+
+| Risk Grade | Score Range | Default Probability | Interest Rate | Recommendation |
+|-----------|-------------|---------------------|---------------|----------------|
+| A | 750+ | < 10% | 5.0% | Approve |
+| B | 700-749 | 10-15% | 7.0% | Approve |
+| C | 650-699 | 15-25% | 9.0% | Review |
+| D | 600-649 | 25-35% | 12.0% | Decline |
+| E | 550-599 | 35-50% | 15.0% | Decline |
+| F | < 550 | > 50% | 20.0% | Decline |
+
+## Key Features Used in Model
+
+### Core Financial Metrics
+- Credit score
+- Debt-to-income ratio
+- Credit utilization
+- Payment-to-income ratio
+- Loan-to-income ratio
+
+### Employment & Stability
+- Employment years
+- Employment score
+- Employment status (unemployed flag)
+
+### Credit History
+- Number of late payments
+- Previous defaults
+- Has delinquency flag
+- Credit quality score
+- Credit history years
+
+### Risk Flags
+- High DTI (> 43%)
+- Low credit score (< 620)
+- High utilization (> 75%)
+- Recent default
+- Unstable employment (< 2 years)
+- Total risk flags
+
+### Demographics
+- Age
+- Monthly income
+- Loan amount
+- Affordability score
+
+### Categorical Indicators
+- Employment status (full-time, self-employed, unemployed)
+- Home ownership (rent, mortgage)
+- Loan purpose (debt consolidation, auto, personal)
+- Education level (bachelors, masters, doctorate)
+
+## File Formats
+
+### Input Format for New Applications (`new_applications.csv`)
+
+Required columns:
+- `customer_id` - Unique identifier
+- `age` - Customer age
+- `employment_status` - Full-time/Self-employed/Part-time/Retired/Unemployed
+- `employment_years` - Years in current employment
+- `education` - High School/Bachelors/Masters/Doctorate
+- `monthly_income` - Monthly income (numeric, no formatting)
+- `annual_income` - Annual income (numeric, no formatting)
+- `home_ownership` - Rent/Mortgage/Own
+- `loan_purpose` - Debt Consolidation/Home Improvement/Auto/Personal/Medical
+- `loan_amount` - Requested loan amount (numeric, no formatting)
+- `loan_term_months` - Loan term in months
+- `monthly_payment` - Monthly payment amount
+- `total_monthly_debt` - Total monthly debt obligations
+- `credit_score` - Credit score (300-850)
+- `credit_utilization` - Credit utilization percentage (0-100)
+- `debt_to_income_ratio` - DTI ratio percentage
+- `num_late_payments` - Number of late payments
+- `num_credit_accounts` - Number of credit accounts
+- `credit_history_years` - Years of credit history
+- `previous_defaults` - Number of previous defaults
+
+## Configuration
+
+All scripts use the output directory:
+```sas
+/home/u64352077/sasuser.v94/output/
+```
+
+Update this path in all scripts if you need to change the location.
+
+## Important Notes
+
+- **Numeric Variables**: All numeric variables (income, loan_amount, etc.) must be plain numbers without dollar signs, commas, or other formatting
+- **Probabilities**: The model converts logits to probabilities using: `p = 1 / (1 + exp(-logit))`
+- **Feature Engineering**: Includes standardization of continuous variables and WOE transformation
+- **Model Type**: Stepwise logistic regression for automatic feature selection
 
 ## Troubleshooting
 
-### Memory Issues
-If you encounter memory errors:
-- Reduce the number of observations in data generation
-- Use PROC HPSPLIT options for memory management
-- Consider sampling for initial model development
+### Issue: Variables are character instead of numeric
+**Solution**: In `output/generate_credit_data.sas`, remove dollar formatting from income and loan amount variables
 
-### Missing Procedures
-If PROC HPSPLIT or HPFOREST are not available:
-- Use PROC DTREE as an alternative for decision trees
-- PROC LOGISTIC can be substituted for a simpler model
-- Check SAS/STAT licensing for advanced procedures
+### Issue: pd_logistic values are too large (not between 0-1)
+**Solution**: Ensure inverse logit transformation is applied in scoring:
+```sas
+pd_logistic = 1 / (1 + exp(-predicted_logit));
+```
 
-### Path Issues
-- Update all file paths to match your environment
-- Ensure write permissions for output directory
-- Verify SAS work library has sufficient space
+### Issue: Model performance is poor
+**Solution**:
+- Check data quality
+- Verify default rate is between 5-15%
+- Ensure proper feature engineering was applied
+- Check for missing values
 
-### Model Performance
-If model performance is poor:
-- Review feature engineering for additional predictors
-- Adjust decision tree parameters (depth, leaf size)
-- Consider ensemble methods if available
-- Check for class imbalance and adjust accordingly
+### Issue: Training and validation sets have different columns
+**Solution**: Ensure feature engineering script applies the same transformations to both datasets
 
-## File Descriptions
+## Output Directory Structure
 
-| File | Purpose | Key Components |
-|------|---------|---------------|
-| `01_generate_credit_data.sas` | Create synthetic training data | 10,000 records with demographics, credit history, default flag |
-| `02_data_exploration.sas` | Exploratory data analysis | Statistics, distributions, correlations |
-| `03_feature_engineering.sas` | Feature creation and transformation | Risk flags, interactions, normalization |
-| `04_train_credit_model.sas` | Model training | Decision tree with HPSPLIT |
-| `05_model_validation.sas` | Performance evaluation | ROC, confusion matrix, lift charts |
-| `06_score_new_customers.sas` | Production scoring | Risk categorization, approval decisions |
-| `07_archive_project.sas` | Project documentation | File manifest, model archive |
-| `tree_model.sas` | Auto-generated scoring code | Production-ready scoring logic |
+```
+output/
+├── credit_train.csv                    # Training data (7,000 records)
+├── credit_validation.csv               # Validation data (3,000 records)
+├── credit_applications_full.csv        # Full dataset (10,000 records)
+├── model_features_train.csv            # Engineered training features
+├── model_features_validation.csv       # Engineered validation features
+├── risk_scores_train.csv               # Scored training set
+├── risk_scores_validation.csv          # Scored validation set
+├── final_model_output.csv              # Final model results
+├── model_coefficients.csv              # Model parameters
+├── validation_summary.csv              # Overall validation metrics
+├── decile_analysis.csv                 # Decile lift analysis
+├── threshold_analysis.csv              # Performance at different thresholds
+├── ks_statistic.csv                    # KS statistic
+├── calibration_plot.csv                # Calibration data
+├── model_performance_metrics.csv       # Comprehensive metrics
+└── new_predictions.csv                 # Predictions for new applications
+```
 
-## Business Value
+## Pipeline Execution
 
-This credit risk scoring model provides:
-- **Risk Reduction**: Identify high-risk applications before approval
-- **Efficiency**: Automate low-risk application approvals
-- **Compliance**: Transparent, interpretable decision logic
-- **Scalability**: Process thousands of applications quickly
-- **Flexibility**: Easy to update with new data or business rules
+To run the complete pipeline:
 
-## Next Steps
+```sas
+/* Step 1: Generate data */
+%include "output/generate_credit_data.sas";
 
-After running the pipeline, you can:
-1. Deploy the scoring code to production systems
-2. Set up monitoring for model drift
-3. Implement A/B testing for model improvements
-4. Integrate with existing loan origination systems
-5. Extend to other credit products (credit cards, mortgages)
-6. Add more sophisticated models (gradient boosting, neural networks)
+/* Step 2: Feature engineering */
+%include "feature_engineering.sas";
 
-## Notes
+/* Step 3: Train model */
+%include "train.sas";
 
-- The project uses synthetic data for demonstration purposes
-- Default rates and patterns are simulated but realistic
-- Model parameters should be tuned for production use
-- Regular retraining is recommended as portfolio changes
-- Consider regulatory requirements for model governance
+/* Step 4: Validate model */
+%include "metrics_calculation.sas";
+
+/* Step 5: Score new applications (requires new_applications.csv) */
+%include "predict.sas";
+```

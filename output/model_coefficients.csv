@@ -1,0 +1,2 @@
+_LINK_,_TYPE_,_STATUS_,_NAME_,Intercept,credit_score,debt_to_income_ratio,num_late_payments,employment_years,flag_low_credit,total_risk_flags,_LNLIKE_,_ESTTYPE_
+LOGIT,PARMS,0 Converged,default_flag,1.5683239054,-0.004916658,0.1161945059,0.0387344168,0.0666665617,-0.173705989,0.3788113112,-3529.55763,MLE

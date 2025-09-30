@@ -15,10 +15,21 @@
  * - Back-testing
  *****************************************************************************/
 
-/* Ensure model outputs exist */
-%if not %sysfunc(exist(work.logit_scored_valid)) %then %do;
-   %include "/home/u64345824/sasuser.v94/bank_risk_credit_scoring/04_train_credit_model.sas";
-%end;
+/* Read scored validation data from CSV */
+proc import datafile="/home/u64352077/sasuser.v94/output/risk_scores_validation.csv"
+    out=work.logit_scored_valid
+    dbms=csv
+    replace;
+    getnames=yes;
+run;
+
+/* Read scored training data from CSV (needed for PSI) */
+proc import datafile="/home/u64352077/sasuser.v94/output/risk_scores_train.csv"
+    out=work.logit_scored_train
+    dbms=csv
+    replace;
+    getnames=yes;
+run;
 
 /*****************************************************************************
  * 1. ROC Curve and AUC Analysis
@@ -351,34 +362,34 @@ run;
 
 /* Export validation results */
 proc export data=work.validation_summary
-   outfile="/home/u64345824/sasuser.v94/bank_risk_credit_scoring/output/validation_summary.csv"
+   outfile="/home/u64352077/sasuser.v94/output/validation_summary.csv"
    dbms=csv
    replace;
 run;
 
 proc export data=work.decile_analysis
-   outfile="/home/u64345824/sasuser.v94/bank_risk_credit_scoring/output/decile_analysis.csv"
+   outfile="/home/u64352077/sasuser.v94/output/decile_analysis.csv"
    dbms=csv
    replace;
 run;
 
 /* Export threshold analysis */
 proc export data=work.threshold_analysis
-   outfile="/home/u64345824/sasuser.v94/bank_risk_credit_scoring/output/threshold_analysis.csv"
+   outfile="/home/u64352077/sasuser.v94/output/threshold_analysis.csv"
    dbms=csv
    replace;
 run;
 
 /* Export KS statistics */
 proc export data=work.ks_statistic
-   outfile="/home/u64345824/sasuser.v94/bank_risk_credit_scoring/output/ks_statistic.csv"
+   outfile="/home/u64352077/sasuser.v94/output/ks_statistic.csv"
    dbms=csv
    replace;
 run;
 
 /* Export calibration plot data */
 proc export data=work.calibration_plot
-   outfile="/home/u64345824/sasuser.v94/bank_risk_credit_scoring/output/calibration_plot.csv"
+   outfile="/home/u64352077/sasuser.v94/output/calibration_plot.csv"
    dbms=csv
    replace;
 run;
@@ -410,15 +421,9 @@ run;
 
 /* Export comprehensive metrics */
 proc export data=work.model_performance_metrics
-   outfile="/home/u64345824/sasuser.v94/bank_risk_credit_scoring/output/model_performance_metrics.csv"
+   outfile="/home/u64352077/sasuser.v94/output/model_performance_metrics.csv"
    dbms=csv
    replace;
-run;
-
-/* Save as SAS dataset for future reference */
-libname output "/home/u64345824/sasuser.v94/bank_risk_credit_scoring/output";
-data output.model_validation_results;
-   set work.model_performance_metrics;
 run;
 
 /* Print summary of saved metrics */

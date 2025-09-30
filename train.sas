@@ -9,10 +9,20 @@
  * and generates risk grades and scorecards for regulatory compliance
  *****************************************************************************/
 
-/* Ensure features are prepared */
-%if not %sysfunc(exist(work.model_features_train)) %then %do;
-   %include "/home/u64345824/sasuser.v94/bank_risk_credit_scoring/03_feature_engineering.sas";
-%end;
+/* Read feature-engineered data from CSV */
+proc import datafile="/home/u64352077/sasuser.v94/output/model_features_train.csv"
+    out=work.model_features_train
+    dbms=csv
+    replace;
+    getnames=yes;
+run;
+
+proc import datafile="/home/u64352077/sasuser.v94/output/model_features_validation.csv"
+    out=work.model_features_validation
+    dbms=csv
+    replace;
+    getnames=yes;
+run;
 
 /*****************************************************************************
  * 1. Logistic Regression Model (Primary Model)
@@ -56,6 +66,8 @@ proc logistic data=work.model_features_train descending;
    title "Logistic Regression Model for Credit Default Prediction";
 run;
 
+/* Model is stored in work.logit_model and can be used with proc plm */
+
 /* Add binary prediction variable for confusion matrix */
 data work.logit_scored_train;
    set work.logit_scored_train;
@@ -90,16 +102,23 @@ run;
  *****************************************************************************/
 
 /* Score validation set with logistic model */
-proc plm source=work.logit_model;
+proc plm restore=work.logit_model;
    score data=work.model_features_validation
-         out=work.logit_scored_valid
-         predicted=pd_logistic;
+         out=work.logit_scored_valid_temp
+         predicted=predicted_logit;
 run;
 
-/* Add binary prediction variable for validation set */
+/* Convert logit to probability */
 data work.logit_scored_valid;
-   set work.logit_scored_valid;
+   set work.logit_scored_valid_temp;
+
+   /* Apply inverse logit (logistic) function to convert to probability */
+   pd_logistic = 1 / (1 + exp(-predicted_logit));
+
+   /* Add binary prediction variable for validation set */
    pred_logistic = (pd_logistic >= 0.5);
+
+   drop predicted_logit;
 run;
 
 /* Evaluate model on validation set */
@@ -172,9 +191,27 @@ proc print data=work.scorecard_params;
    title "Logistic Regression Model Coefficients";
 run;
 
-/* Export scored dataset sample */
-proc export data=work.risk_scores(obs=100)
-   outfile="/home/u64345824/sasuser.v94/bank_risk_credit_scoring/output/scored_applications.csv"
+/* Export scored datasets to CSV */
+proc export data=work.risk_scores
+   outfile="/home/u64352077/sasuser.v94/output/risk_scores_train.csv"
+   dbms=csv
+   replace;
+run;
+
+proc export data=work.logit_scored_valid
+   outfile="/home/u64352077/sasuser.v94/output/risk_scores_validation.csv"
+   dbms=csv
+   replace;
+run;
+
+proc export data=work.final_model_output
+   outfile="/home/u64352077/sasuser.v94/output/final_model_output.csv"
+   dbms=csv
+   replace;
+run;
+
+proc export data=work.scorecard_params
+   outfile="/home/u64352077/sasuser.v94/output/model_coefficients.csv"
    dbms=csv
    replace;
 run;
@@ -188,6 +225,7 @@ data work.final_model_output;
 run;
 
 %put NOTE: Logistic regression model training completed successfully;
-%put NOTE: Model stored as work.logit_model;
+%put NOTE: Model stored as work.logit_model (item store);
+%put NOTE: Model coefficients exported to: /home/u64352077/sasuser.v94/output/model_coefficients.csv;
 %put NOTE: Risk scores generated using 300-850 scale;
-%put NOTE: Model outputs saved to output folder;
+%put NOTE: Model outputs exported to: /home/u64352077/sasuser.v94/output/;

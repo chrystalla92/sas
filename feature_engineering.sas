@@ -12,10 +12,20 @@
  * - Feature scaling and transformation
  *****************************************************************************/
 
-/* Ensure data is loaded */
-%if not %sysfunc(exist(work.credit_train)) %then %do;
-   %include "/home/u64345824/sasuser.v94/bank_risk_credit_scoring/01_generate_credit_data.sas";
-%end;
+/* Read input data from CSV */
+proc import datafile="/home/u64352077/sasuser.v94/output/credit_train.csv"
+    out=work.credit_train
+    dbms=csv
+    replace;
+    getnames=yes;
+run;
+
+proc import datafile="/home/u64352077/sasuser.v94/output/credit_validation.csv"
+    out=work.credit_validation
+    dbms=csv
+    replace;
+    getnames=yes;
+run;
 
 /*****************************************************************************
  * 1. Create Derived Features
@@ -276,14 +286,52 @@ data work.credit_validation_features;
    purpose_personal = (loan_purpose = 'Personal');
 run;
 
+/* Apply WOE transformation to validation set */
+proc sql;
+   create table work.credit_validation_woe as
+   select a.*,
+      case
+         when a.credit_score < 580 then b1.woe
+         when a.credit_score < 650 then b2.woe
+         when a.credit_score < 700 then b3.woe
+         when a.credit_score < 750 then b4.woe
+         else b5.woe
+      end as woe_credit_score
+   from work.credit_validation_features a
+   cross join (select woe from work.woe_credit_score where credit_band = 'A. <580') b1
+   cross join (select woe from work.woe_credit_score where credit_band = 'B. 580-649') b2
+   cross join (select woe from work.woe_credit_score where credit_band = 'C. 650-699') b3
+   cross join (select woe from work.woe_credit_score where credit_band = 'D. 700-749') b4
+   cross join (select woe from work.woe_credit_score where credit_band = 'E. 750+') b5;
+quit;
+
 /* Standardize validation set using training set parameters */
-proc stdize data=work.credit_validation_features
-           out=work.model_features_validation
+proc stdize data=work.credit_validation_woe
+           out=work.credit_validation_scaled
            method=std;
    var age employment_years monthly_income annual_income loan_amount
        credit_utilization debt_to_income_ratio num_late_payments
        payment_to_income_ratio loan_to_income_ratio employment_score
        credit_quality_score affordability_score;
+run;
+
+/* Select same features as training set */
+data work.model_features_validation;
+   set work.credit_validation_scaled;
+
+   /* Keep same columns as training set in same order */
+   keep customer_id age employment_years monthly_income
+        credit_history_years num_credit_accounts num_late_payments
+        credit_utilization previous_defaults loan_amount
+        loan_term_months debt_to_income_ratio credit_score
+        default_flag payment_to_income_ratio loan_to_income_ratio
+        employment_score credit_quality_score has_delinquency
+        flag_high_dti flag_low_credit flag_high_util
+        flag_recent_default flag_unstable_employment total_risk_flags
+        affordability_score woe_credit_score emp_fulltime
+        emp_selfemployed emp_unemployed edu_bachelors edu_masters
+        edu_doctorate home_rent home_mortgage purpose_debt
+        purpose_auto purpose_personal;
 run;
 
 /* Summary of engineered features */
@@ -293,6 +341,19 @@ proc means data=work.model_features_train n mean std min max;
    title "Summary of Engineered Features";
 run;
 
+/* Export final datasets to CSV */
+proc export data=work.model_features_train
+    outfile="/home/u64352077/sasuser.v94/output/model_features_train.csv"
+    dbms=csv
+    replace;
+run;
+
+proc export data=work.model_features_validation
+    outfile="/home/u64352077/sasuser.v94/output/model_features_validation.csv"
+    dbms=csv
+    replace;
+run;
+
 %put NOTE: Feature engineering completed successfully;
-%put NOTE: Training set ready: work.model_features_train;
-%put NOTE: Validation set ready: work.model_features_validation;
+%put NOTE: Training set exported to: /home/u64352077/sasuser.v94/output/model_features_train.csv;
+%put NOTE: Validation set exported to: /home/u64352077/sasuser.v94/output/model_features_validation.csv;
