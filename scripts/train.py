@@ -499,7 +499,7 @@ def generate_risk_scores(df, model, selected_features, logger=None):
         'E': 0.10,
         'F': 0.15
     }
-    interest_rates = risk_grades.map(rate_premiums) + base_rate
+    interest_rates = risk_grades.map(rate_premiums).astype(float) + base_rate
     
     # Create output DataFrame
     output_df = pd.DataFrame({
