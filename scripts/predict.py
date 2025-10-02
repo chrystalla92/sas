@@ -539,15 +539,22 @@ def generate_predictions(df, X, model, logger):
     }
     interest_rates = risk_grades.map(rate_premiums).astype(float) + base_rate
     
-    # Create output DataFrame
+    # Create output DataFrame - include default_flag if present in input
     output_df = pd.DataFrame({
-        'customer_id': df['customer_id'],
-        'probability': probabilities,
-        'risk_score': risk_scores,
-        'risk_grade': risk_grades,
-        'recommendation': recommendations,
-        'interest_rate': interest_rates
+        'customer_id': df['customer_id']
     })
+    
+    # Add default_flag if it exists in the input dataframe
+    if 'default_flag' in df.columns:
+        output_df['default_flag'] = df['default_flag'].values
+        logger.info("default_flag found in input and included in output")
+    
+    # Add prediction columns
+    output_df['probability'] = probabilities
+    output_df['risk_score'] = risk_scores
+    output_df['risk_grade'] = risk_grades
+    output_df['recommendation'] = recommendations
+    output_df['interest_rate'] = interest_rates
     
     # Log distribution
     logger.info("\nRisk Grade Distribution:")
