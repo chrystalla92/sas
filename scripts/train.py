@@ -528,9 +528,9 @@ def generate_risk_scores(df, model, selected_features, logger=None):
     return output_df
 
 
-def save_model_outputs(model, coefficients_df, models_dir, logger=None):
+def save_model_outputs(model, coefficients_df, selected_features, models_dir, logger=None):
     """
-    Save trained model and coefficients.
+    Save trained model, coefficients, and selected features.
     
     Parameters
     ----------
@@ -538,6 +538,8 @@ def save_model_outputs(model, coefficients_df, models_dir, logger=None):
         Trained model
     coefficients_df : pd.DataFrame
         Coefficients with p-values
+    selected_features : list
+        List of selected feature names
     models_dir : Path
         Models directory path
     logger : logging.Logger
@@ -557,6 +559,14 @@ def save_model_outputs(model, coefficients_df, models_dir, logger=None):
     coefficients_df.to_csv(coef_path, index=False)
     if logger:
         logger.info(f"Coefficients saved to: {coef_path}")
+    
+    # Save selected features
+    features_path = models_dir / 'selected_features.pkl'
+    with open(features_path, 'wb') as f:
+        pickle.dump(selected_features, f)
+    if logger:
+        logger.info(f"Selected features saved to: {features_path}")
+        logger.info(f"Number of selected features: {len(selected_features)}")
 
 
 def save_risk_scores(train_scores, val_scores, output_dir, logger=None):
@@ -785,8 +795,8 @@ Examples:
             X_train, y_train, selected_features, logger=logger
         )
         
-        # 5. Save model and coefficients
-        save_model_outputs(model, coefficients_df, models_dir, logger=logger)
+        # 5. Save model, coefficients, and selected features
+        save_model_outputs(model, coefficients_df, selected_features, models_dir, logger=logger)
         
         # 6. Generate risk scores for training set
         train_scores = generate_risk_scores(
