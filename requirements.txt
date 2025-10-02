@@ -1,0 +1,17 @@
+# Python Credit Risk Model Dependencies
+# Python version requirement: 3.8+
+
+# Data manipulation and CSV I/O
+pandas==2.0.3
+
+# Machine learning and model evaluation
+scikit-learn==1.3.2
+
+# Numerical operations
+numpy==1.24.4
+
+# Statistical functions (p-value calculations)
+scipy==1.11.4
+
+# Model serialization
+joblib==1.3.2
