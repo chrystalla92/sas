@@ -86,10 +86,20 @@ def create_ratio_features(df, logger):
     # But we'll keep it for consistency
     
     # payment_to_income_ratio = monthly_payment / monthly_income
-    df['payment_to_income_ratio'] = df['monthly_payment'] / df['monthly_income']
+    # Handle division by zero: if monthly_income is 0, set ratio to 0
+    df['payment_to_income_ratio'] = np.where(
+        df['monthly_income'] > 0,
+        df['monthly_payment'] / df['monthly_income'],
+        0
+    )
     
     # loan_to_income_ratio = loan_amount / annual_income
-    df['loan_to_income_ratio'] = df['loan_amount'] / df['annual_income']
+    # Handle division by zero: if annual_income is 0, set ratio to 0
+    df['loan_to_income_ratio'] = np.where(
+        df['annual_income'] > 0,
+        df['loan_amount'] / df['annual_income'],
+        0
+    )
     
     logger.info("Ratio features created: payment_to_income_ratio, loan_to_income_ratio")
     
@@ -139,8 +149,11 @@ def create_composite_scores(df, logger):
     )
     
     # Affordability score
-    df['affordability_score'] = (
-        (df['monthly_income'] - df['total_monthly_debt']) / df['monthly_payment']
+    # Handle division by zero: if monthly_payment is 0, set affordability_score to 0
+    df['affordability_score'] = np.where(
+        df['monthly_payment'] > 0,
+        (df['monthly_income'] - df['total_monthly_debt']) / df['monthly_payment'],
+        0
     )
     
     # Drop intermediate emp_stability column
@@ -391,6 +404,51 @@ def create_dummy_variables(df, logger):
     return df
 
 
+def validate_and_clean_features(df, continuous_vars, logger):
+    """
+    Validate and clean features by checking for infinity and NaN values.
+    
+    Replaces:
+    - inf with a large finite value (999)
+    - -inf with a small finite value (-999)
+    - NaN with 0
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe
+    continuous_vars : list
+        List of continuous variable names to validate
+    logger : logging.Logger
+        Logger instance
+        
+    Returns
+    -------
+    pd.DataFrame
+        Cleaned dataframe
+    """
+    logger.info("Validating and cleaning features for inf/NaN values")
+    
+    for var in continuous_vars:
+        if var in df.columns:
+            # Check for infinity
+            inf_count = np.isinf(df[var]).sum()
+            if inf_count > 0:
+                logger.warning(f"Found {inf_count} infinity values in {var}, replacing with finite values")
+                df[var] = df[var].replace([np.inf], 999)
+                df[var] = df[var].replace([-np.inf], -999)
+            
+            # Check for NaN
+            nan_count = df[var].isna().sum()
+            if nan_count > 0:
+                logger.warning(f"Found {nan_count} NaN values in {var}, replacing with 0")
+                df[var] = df[var].fillna(0)
+    
+    logger.info("Feature validation and cleaning complete")
+    
+    return df
+
+
 def standardize_features(train_df, val_df, continuous_vars, logger):
     """
     Standardize continuous features using StandardScaler.
@@ -538,6 +596,10 @@ def main():
             'payment_to_income_ratio', 'loan_to_income_ratio',
             'employment_score', 'credit_quality_score', 'affordability_score'
         ]
+        
+        # Validate and clean features before standardization
+        train_df = validate_and_clean_features(train_df, continuous_vars, logger)
+        val_df = validate_and_clean_features(val_df, continuous_vars, logger)
         
         train_df, val_df, scaler = standardize_features(train_df, val_df, continuous_vars, logger)
         
