@@ -544,6 +544,52 @@ def main():
     """
     Main execution function for feature engineering pipeline.
     """
+    import argparse
+    
+    # Setup argument parser
+    parser = argparse.ArgumentParser(
+        description='Feature Engineering Pipeline for Credit Risk Model',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use default paths
+  python feature_engineering.py
+  
+  # Specify custom input files
+  python feature_engineering.py --train-input data/train.csv --val-input data/val.csv
+  
+  # Specify custom output directory
+  python feature_engineering.py --output-dir /path/to/output
+  
+  # Specify all paths
+  python feature_engineering.py --train-input my_train.csv --val-input my_val.csv --output-dir my_output
+        """
+    )
+    
+    # Define default paths
+    project_root = Path(__file__).parent.parent
+    
+    parser.add_argument(
+        '--train-input',
+        type=str,
+        default=str(project_root / 'credit_train.csv'),
+        help='Path to training CSV file (default: credit_train.csv)'
+    )
+    parser.add_argument(
+        '--val-input',
+        type=str,
+        default=str(project_root / 'credit_validation.csv'),
+        help='Path to validation CSV file (default: credit_validation.csv)'
+    )
+    parser.add_argument(
+        '--output-dir',
+        type=str,
+        default=str(project_root),
+        help='Output directory for processed data and models (default: project root)'
+    )
+    
+    args = parser.parse_args()
+    
     # Setup logging
     logger = setup_logging('credit_risk_model.log')
     logger.info("="*80)
@@ -551,10 +597,16 @@ def main():
     logger.info("="*80)
     
     try:
-        # Define paths
-        project_root = Path(__file__).parent.parent
-        train_path = project_root / 'credit_train.csv'
-        val_path = project_root / 'credit_validation.csv'
+        # Convert paths to Path objects
+        train_path = Path(args.train_input)
+        val_path = Path(args.val_input)
+        output_root = Path(args.output_dir)
+        
+        # Log the paths being used
+        logger.info(f"Input paths:")
+        logger.info(f"  Training data: {train_path}")
+        logger.info(f"  Validation data: {val_path}")
+        logger.info(f"  Output directory: {output_root}")
         
         # 1. Load data
         train_df, val_df = load_data(train_path, val_path, logger)
@@ -630,7 +682,7 @@ def main():
         logger.info(f"Final feature columns: {len(final_columns)}")
         
         # 11. Save outputs
-        save_outputs(train_df, val_df, woe_mapping, scaler, project_root, logger)
+        save_outputs(train_df, val_df, woe_mapping, scaler, output_root, logger)
         
         logger.info("="*80)
         logger.info("Feature Engineering Pipeline Completed Successfully")
