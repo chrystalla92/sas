@@ -86,7 +86,7 @@ def validate_required_columns(df, dataset_name, logger):
     ValueError
         If required columns are missing
     """
-    required_cols = ['customer_id', 'default_flag', 'pd_logistic', 'credit_risk_score']
+    required_cols = ['customer_id', 'default_flag', 'probability', 'risk_score']
     missing_cols = [col for col in required_cols if col not in df.columns]
     
     if missing_cols:
@@ -157,8 +157,8 @@ def calculate_ks_statistic(y_true, y_pred, logger):
     # Create dataframe and sort by predicted probability
     df = pd.DataFrame({
         'default_flag': y_true,
-        'pd_logistic': y_pred
-    }).sort_values('pd_logistic').reset_index(drop=True)
+        'probability': y_pred
+    }).sort_values('probability').reset_index(drop=True)
     
     # Calculate total counts
     total_good = (df['default_flag'] == 0).sum()
@@ -180,12 +180,12 @@ def calculate_ks_statistic(y_true, y_pred, logger):
     # Find maximum KS
     max_ks_idx = df['ks_value'].idxmax()
     ks_statistic = df.loc[max_ks_idx, 'ks_value']
-    ks_cutoff = df.loc[max_ks_idx, 'pd_logistic']
+    ks_cutoff = df.loc[max_ks_idx, 'probability']
     
     logger.info(f"KS Statistic: {ks_statistic:.6f} at probability cutoff: {ks_cutoff:.6f}")
     
     # Create bins for output (using deciles)
-    df['probability_bin'] = pd.qcut(df['pd_logistic'], q=10, labels=False, duplicates='drop') + 1
+    df['probability_bin'] = pd.qcut(df['probability'], q=10, labels=False, duplicates='drop') + 1
     
     # Aggregate by bin for output
     ks_output = df.groupby('probability_bin').agg({
@@ -261,12 +261,12 @@ def calculate_confusion_matrices(y_true, y_pred, thresholds, logger):
 
 def calculate_decile_analysis(df, logger):
     """
-    Calculate decile analysis based on credit_risk_score.
+    Calculate decile analysis based on risk_score.
     
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with default_flag, pd_logistic, credit_risk_score
+        DataFrame with default_flag, probability, risk_score
     logger : logging.Logger
         Logger instance
         
@@ -277,19 +277,19 @@ def calculate_decile_analysis(df, logger):
     """
     logger.info("Calculating decile analysis")
     
-    # Create deciles based on pd_logistic (descending - highest risk first)
-    # Use pd_logistic instead of credit_risk_score for decile ranking
+    # Create deciles based on probability (descending - highest risk first)
+    # Use probability instead of risk_score for decile ranking
     df = df.copy()
-    df['decile'] = pd.qcut(df['pd_logistic'], q=10, labels=False, duplicates='drop')
-    # Reverse so that decile 10 = highest risk (highest pd_logistic)
+    df['decile'] = pd.qcut(df['probability'], q=10, labels=False, duplicates='drop')
+    # Reverse so that decile 10 = highest risk (highest probability)
     df['decile'] = 10 - df['decile']
     
     # Calculate metrics by decile
     decile_metrics = df.groupby('decile').agg({
         'customer_id': 'count',
         'default_flag': ['sum', 'mean'],
-        'pd_logistic': 'mean',
-        'credit_risk_score': ['min', 'max']
+        'probability': 'mean',
+        'risk_score': ['min', 'max']
     }).reset_index()
     
     # Flatten column names
@@ -326,17 +326,17 @@ def calculate_psi(train_pred, validation_pred, logger):
     logger.info("Calculating Population Stability Index (PSI)")
     
     # Create 10 equal-frequency bins based on training data
-    train_df = pd.DataFrame({'pd_logistic': train_pred})
-    validation_df = pd.DataFrame({'pd_logistic': validation_pred})
+    train_df = pd.DataFrame({'probability': train_pred})
+    validation_df = pd.DataFrame({'probability': validation_pred})
     
     # Use qcut on training data to get bin edges
-    train_df['bin'] = pd.qcut(train_df['pd_logistic'], q=10, labels=False, duplicates='drop')
+    train_df['bin'] = pd.qcut(train_df['probability'], q=10, labels=False, duplicates='drop')
     
     # Get the bin edges from training data
-    bin_edges = pd.qcut(train_df['pd_logistic'], q=10, retbins=True, duplicates='drop')[1]
+    bin_edges = pd.qcut(train_df['probability'], q=10, retbins=True, duplicates='drop')[1]
     
     # Apply same bins to validation data
-    validation_df['bin'] = pd.cut(validation_df['pd_logistic'], bins=bin_edges, labels=False, include_lowest=True)
+    validation_df['bin'] = pd.cut(validation_df['probability'], bins=bin_edges, labels=False, include_lowest=True)
     
     # Handle any values outside training range
     validation_df['bin'] = validation_df['bin'].fillna(0).astype(int)
@@ -391,15 +391,15 @@ def calculate_calibration_metrics(y_true, y_pred, logger):
     # Create dataframe
     df = pd.DataFrame({
         'default_flag': y_true,
-        'pd_logistic': y_pred
+        'probability': y_pred
     })
     
     # Create 10 bins based on predicted probability
-    df['probability_bin'] = pd.qcut(df['pd_logistic'], q=10, labels=False, duplicates='drop') + 1
+    df['probability_bin'] = pd.qcut(df['probability'], q=10, labels=False, duplicates='drop') + 1
     
     # Calculate observed vs predicted by bin
     calibration_data = df.groupby('probability_bin').agg({
-        'pd_logistic': ['mean', 'count'],
+        'probability': ['mean', 'count'],
         'default_flag': 'mean'
     }).reset_index()
     
@@ -560,10 +560,10 @@ Examples:
         
         # Extract arrays for calculations
         y_train = train_df['default_flag'].values
-        y_pred_train = train_df['pd_logistic'].values
+        y_pred_train = train_df['probability'].values
         
         y_validation = validation_df['default_flag'].values
-        y_pred_validation = validation_df['pd_logistic'].values
+        y_pred_validation = validation_df['probability'].values
         
         logger.info(f"Training set: {len(y_train)} records, {y_train.sum()} defaults ({y_train.mean():.4f} rate)")
         logger.info(f"Validation set: {len(y_validation)} records, {y_validation.sum()} defaults ({y_validation.mean():.4f} rate)")
