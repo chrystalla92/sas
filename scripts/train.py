@@ -26,6 +26,7 @@ import sys
 # Add scripts directory to path for imports
 sys.path.append(str(Path(__file__).parent))
 from logging_config import setup_logging
+import feature_engineering
 
 
 def load_data(train_path, validation_path, logger):
@@ -589,6 +590,41 @@ def save_risk_scores(train_scores, val_scores, output_dir, logger=None):
         logger.info(f"Validation risk scores saved to: {val_path} ({len(val_scores)} rows)")
 
 
+def check_feature_engineering_outputs(data_dir, models_dir, logger=None):
+    """
+    Check if feature engineering outputs exist.
+    
+    Parameters
+    ----------
+    data_dir : Path
+        Data directory path
+    models_dir : Path
+        Models directory path
+    logger : logging.Logger
+        Logger instance
+        
+    Returns
+    -------
+    bool
+        True if all required outputs exist, False otherwise
+    """
+    required_files = [
+        data_dir / 'model_features_train.csv',
+        data_dir / 'model_features_validation.csv',
+        models_dir / 'scaler.pkl',
+        models_dir / 'woe_mapping.pkl'
+    ]
+    
+    all_exist = True
+    for file_path in required_files:
+        if not file_path.exists():
+            if logger:
+                logger.warning(f"Required file not found: {file_path}")
+            all_exist = False
+    
+    return all_exist
+
+
 def verify_consistency(models_dir, logger=None):
     """
     Load and verify consistency of saved scaler and WOE mapping.
@@ -645,6 +681,20 @@ def main():
         
         train_path = data_dir / 'model_features_train.csv'
         val_path = data_dir / 'model_features_validation.csv'
+        
+        # Check if feature engineering outputs exist
+        logger.info("Checking for feature engineering outputs...")
+        if not check_feature_engineering_outputs(data_dir, models_dir, logger=logger):
+            logger.info("=" * 80)
+            logger.info("Feature engineering outputs not found. Running feature engineering first...")
+            logger.info("=" * 80)
+            # Run feature engineering
+            feature_engineering.main()
+            logger.info("=" * 80)
+            logger.info("Feature engineering completed. Resuming model training...")
+            logger.info("=" * 80)
+        else:
+            logger.info("All feature engineering outputs found. Proceeding with training.")
         
         # Verify consistency of saved artifacts
         verify_consistency(models_dir, logger=logger)
