@@ -26,7 +26,7 @@ from logging_config import setup_logging
 
 def load_model_artifacts(models_dir, logger):
     """
-    Load saved model artifacts (model, scaler, WOE mapping).
+    Load saved model artifacts (model, scaler, WOE mapping, selected features).
     
     Parameters
     ----------
@@ -38,7 +38,7 @@ def load_model_artifacts(models_dir, logger):
     Returns
     -------
     tuple
-        (model, scaler, woe_mapping)
+        (model, scaler, woe_mapping, selected_features)
     """
     logger.info("Loading model artifacts")
     
@@ -67,7 +67,17 @@ def load_model_artifacts(models_dir, logger):
     logger.info(f"Loaded WOE mapping from: {woe_path}")
     logger.info(f"WOE bins: {list(woe_mapping.keys())}")
     
-    return model, scaler, woe_mapping
+    # Load selected features
+    features_path = models_dir / 'selected_features.pkl'
+    if not features_path.exists():
+        raise FileNotFoundError(f"Selected features file not found: {features_path}")
+    with open(features_path, 'rb') as f:
+        selected_features = pickle.load(f)
+    logger.info(f"Loaded selected features from: {features_path}")
+    logger.info(f"Number of selected features: {len(selected_features)}")
+    logger.info(f"Selected features: {selected_features}")
+    
+    return model, scaler, woe_mapping, selected_features
 
 
 def load_new_applications(data_path, logger):
@@ -421,10 +431,10 @@ def standardize_features(df, continuous_vars, scaler, logger):
     return df
 
 
-def prepare_features_for_prediction(df, model, logger):
+def prepare_features_for_prediction(df, model, selected_features, logger):
     """
     Prepare final feature matrix for prediction.
-    Ensure features match model expectations (count and order).
+    Use only the selected features from training.
     
     Parameters
     ----------
@@ -432,6 +442,8 @@ def prepare_features_for_prediction(df, model, logger):
         Input dataframe with all features
     model : LogisticRegression
         Trained model
+    selected_features : list
+        List of selected feature names from training
     logger : logging.Logger
         Logger instance
         
@@ -441,30 +453,16 @@ def prepare_features_for_prediction(df, model, logger):
         (X, feature_names) - feature matrix and feature names list
     """
     logger.info("Preparing features for prediction")
+    logger.info(f"Using {len(selected_features)} selected features from training")
     
-    # Define expected feature columns (all except customer_id and default_flag)
-    # These should match the training features
-    feature_cols = [
-        'age', 'employment_years', 'monthly_income', 'annual_income', 'loan_amount',
-        'credit_utilization', 'debt_to_income_ratio', 'num_late_payments',
-        'payment_to_income_ratio', 'loan_to_income_ratio',
-        'employment_score', 'credit_quality_score', 'affordability_score',
-        'num_credit_accounts', 'credit_history_years', 'previous_defaults',
-        'loan_term_months', 'credit_score',
-        'credit_score_woe',
-        'flag_high_dti', 'flag_low_credit', 'has_delinquency',
-        'emp_fulltime', 'emp_selfemployed', 'emp_unemployed',
-        'edu_bachelors', 'edu_masters', 'edu_doctorate'
-    ]
-    
-    # Check if all required features exist
-    missing_features = [col for col in feature_cols if col not in df.columns]
+    # Check if all selected features exist in the dataframe
+    missing_features = [col for col in selected_features if col not in df.columns]
     if missing_features:
-        logger.error(f"Missing required features: {missing_features}")
-        raise ValueError(f"Missing required features: {missing_features}")
+        logger.error(f"Missing selected features: {missing_features}")
+        raise ValueError(f"Missing selected features: {missing_features}")
     
-    # Extract features in correct order
-    X = df[feature_cols].copy()
+    # Extract only the selected features in the same order as training
+    X = df[selected_features].copy()
     
     # Verify feature count matches model expectations
     if X.shape[1] != model.n_features_in_:
@@ -474,7 +472,7 @@ def prepare_features_for_prediction(df, model, logger):
     logger.info(f"Features prepared: {X.shape[1]} columns, {X.shape[0]} rows")
     logger.info(f"Feature count matches model expectation: {model.n_features_in_}")
     
-    return X, feature_cols
+    return X, selected_features
 
 
 def generate_predictions(df, X, model, logger):
@@ -664,7 +662,7 @@ Examples:
         logger.info(f"  Output file: {output_path}")
         
         # 1. Load model artifacts
-        model, scaler, woe_mapping = load_model_artifacts(models_dir, logger)
+        model, scaler, woe_mapping, selected_features = load_model_artifacts(models_dir, logger)
         
         # 2. Load new applications
         df = load_new_applications(data_path, logger)
@@ -703,7 +701,7 @@ Examples:
         df = standardize_features(df, continuous_vars, scaler, logger)
         
         # 11. Prepare features for prediction
-        X, feature_names = prepare_features_for_prediction(df, model, logger)
+        X, feature_names = prepare_features_for_prediction(df, model, selected_features, logger)
         
         # 12. Generate predictions
         predictions_df = generate_predictions(df, X, model, logger)
