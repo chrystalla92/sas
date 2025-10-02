@@ -666,6 +666,58 @@ def main():
     """
     Main execution function for model training pipeline.
     """
+    import argparse
+    
+    # Setup argument parser
+    parser = argparse.ArgumentParser(
+        description='Model Training Pipeline for Credit Risk Model',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use default paths
+  python train.py
+  
+  # Specify custom input files
+  python train.py --train-input data/train_features.csv --val-input data/val_features.csv
+  
+  # Specify custom directories
+  python train.py --models-dir /path/to/models --output-dir /path/to/output
+  
+  # Specify all paths
+  python train.py --train-input my_train.csv --val-input my_val.csv --models-dir models --output-dir output
+        """
+    )
+    
+    # Define default paths
+    project_root = Path(__file__).parent.parent
+    
+    parser.add_argument(
+        '--train-input',
+        type=str,
+        default=str(project_root / 'data' / 'model_features_train.csv'),
+        help='Path to training features CSV file (default: data/model_features_train.csv)'
+    )
+    parser.add_argument(
+        '--val-input',
+        type=str,
+        default=str(project_root / 'data' / 'model_features_validation.csv'),
+        help='Path to validation features CSV file (default: data/model_features_validation.csv)'
+    )
+    parser.add_argument(
+        '--models-dir',
+        type=str,
+        default=str(project_root / 'models'),
+        help='Directory for saving model artifacts (default: models/)'
+    )
+    parser.add_argument(
+        '--output-dir',
+        type=str,
+        default=str(project_root / 'output'),
+        help='Directory for saving output files (default: output/)'
+    )
+    
+    args = parser.parse_args()
+    
     # Setup logging
     logger = setup_logging('credit_risk_model.log')
     logger.info("=" * 80)
@@ -673,14 +725,19 @@ def main():
     logger.info("=" * 80)
     
     try:
-        # Define paths
-        project_root = Path(__file__).parent.parent
-        data_dir = project_root / 'data'
-        models_dir = project_root / 'models'
-        output_dir = project_root / 'output'
+        # Convert paths to Path objects
+        train_path = Path(args.train_input)
+        val_path = Path(args.val_input)
+        models_dir = Path(args.models_dir)
+        output_dir = Path(args.output_dir)
+        data_dir = train_path.parent  # For checking feature engineering outputs
         
-        train_path = data_dir / 'model_features_train.csv'
-        val_path = data_dir / 'model_features_validation.csv'
+        # Log the paths being used
+        logger.info(f"Input paths:")
+        logger.info(f"  Training features: {train_path}")
+        logger.info(f"  Validation features: {val_path}")
+        logger.info(f"  Models directory: {models_dir}")
+        logger.info(f"  Output directory: {output_dir}")
         
         # Check if feature engineering outputs exist
         logger.info("Checking for feature engineering outputs...")

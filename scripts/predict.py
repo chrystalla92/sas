@@ -596,6 +596,55 @@ def main():
     """
     Main execution function for prediction pipeline.
     """
+    import argparse
+    
+    # Setup argument parser
+    parser = argparse.ArgumentParser(
+        description='Prediction Pipeline for Credit Risk Model',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use default paths
+  python predict.py
+  
+  # Specify custom input file
+  python predict.py --input data/applications.csv
+  
+  # Specify custom output file
+  python predict.py --output results/predictions.csv
+  
+  # Specify models directory
+  python predict.py --models-dir /path/to/models
+  
+  # Specify all paths
+  python predict.py --input my_apps.csv --output my_preds.csv --models-dir my_models
+        """
+    )
+    
+    # Define default paths
+    project_root = Path(__file__).parent.parent
+    
+    parser.add_argument(
+        '--input',
+        type=str,
+        default=str(project_root / 'data' / 'new_applications.csv'),
+        help='Path to new applications CSV file (default: data/new_applications.csv)'
+    )
+    parser.add_argument(
+        '--output',
+        type=str,
+        default=str(project_root / 'output' / 'new_predictions.csv'),
+        help='Path to output predictions CSV file (default: output/new_predictions.csv)'
+    )
+    parser.add_argument(
+        '--models-dir',
+        type=str,
+        default=str(project_root / 'models'),
+        help='Directory containing model artifacts (default: models/)'
+    )
+    
+    args = parser.parse_args()
+    
     # Setup logging
     logger = setup_logging('credit_risk_model.log')
     logger.info("=" * 80)
@@ -603,11 +652,16 @@ def main():
     logger.info("=" * 80)
     
     try:
-        # Define paths
-        project_root = Path(__file__).parent.parent
-        data_path = project_root / 'data' / 'new_applications.csv'
-        models_dir = project_root / 'models'
-        output_path = project_root / 'output' / 'new_predictions.csv'
+        # Convert paths to Path objects
+        data_path = Path(args.input)
+        models_dir = Path(args.models_dir)
+        output_path = Path(args.output)
+        
+        # Log the paths being used
+        logger.info(f"Input paths:")
+        logger.info(f"  New applications: {data_path}")
+        logger.info(f"  Models directory: {models_dir}")
+        logger.info(f"  Output file: {output_path}")
         
         # 1. Load model artifacts
         model, scaler, woe_mapping = load_model_artifacts(models_dir, logger)
