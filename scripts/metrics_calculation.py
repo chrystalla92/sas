@@ -25,14 +25,16 @@ sys.path.append(str(Path(__file__).parent))
 from logging_config import setup_logging
 
 
-def load_risk_scores(output_dir, logger):
+def load_risk_scores(train_path, validation_path, logger):
     """
     Load risk scores for training and validation sets.
     
     Parameters
     ----------
-    output_dir : Path
-        Output directory path containing risk score CSV files
+    train_path : Path or str
+        Path to training risk scores CSV file
+    validation_path : Path or str
+        Path to validation risk scores CSV file
     logger : logging.Logger
         Logger instance
         
@@ -43,8 +45,11 @@ def load_risk_scores(output_dir, logger):
     """
     logger.info("Loading risk score files")
     
+    # Convert to Path objects if strings
+    train_path = Path(train_path)
+    validation_path = Path(validation_path)
+    
     # Load validation data
-    validation_path = output_dir / 'risk_scores_validation.csv'
     if not validation_path.exists():
         raise FileNotFoundError(f"Validation file not found: {validation_path}")
     
@@ -53,7 +58,6 @@ def load_risk_scores(output_dir, logger):
     logger.info(f"Validation file path: {validation_path}")
     
     # Load training data
-    train_path = output_dir / 'risk_scores_train.csv'
     if not train_path.exists():
         raise FileNotFoundError(f"Training file not found: {train_path}")
     
@@ -480,6 +484,52 @@ def main():
     """
     Main execution function for metrics calculation.
     """
+    import argparse
+    
+    # Setup argument parser
+    parser = argparse.ArgumentParser(
+        description='Metrics Calculation Script for Credit Risk Model',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use default paths
+  python metrics_calculation.py
+  
+  # Specify custom input files
+  python metrics_calculation.py --train-input output/risk_scores_train.csv --val-input output/risk_scores_validation.csv
+  
+  # Specify custom output directory
+  python metrics_calculation.py --output-dir /path/to/output
+  
+  # Specify all paths
+  python metrics_calculation.py --train-input my_train_scores.csv --val-input my_val_scores.csv --output-dir results
+        """
+    )
+    
+    # Define default paths
+    project_root = Path(__file__).parent.parent
+    
+    parser.add_argument(
+        '--train-input',
+        type=str,
+        default=str(project_root / 'output' / 'risk_scores_train.csv'),
+        help='Path to training risk scores CSV file (default: output/risk_scores_train.csv)'
+    )
+    parser.add_argument(
+        '--val-input',
+        type=str,
+        default=str(project_root / 'output' / 'risk_scores_validation.csv'),
+        help='Path to validation risk scores CSV file (default: output/risk_scores_validation.csv)'
+    )
+    parser.add_argument(
+        '--output-dir',
+        type=str,
+        default=str(project_root / 'output'),
+        help='Directory for saving metric output files (default: output/)'
+    )
+    
+    args = parser.parse_args()
+    
     # Setup logging
     logger = setup_logging()
     logger.info("="*80)
@@ -487,12 +537,22 @@ def main():
     logger.info("="*80)
     
     try:
-        # Define paths
-        project_root = Path(__file__).parent.parent
-        output_dir = project_root / 'output'
+        # Convert paths to Path objects
+        train_path = Path(args.train_input)
+        val_path = Path(args.val_input)
+        output_dir = Path(args.output_dir)
+        
+        # Log the paths being used
+        logger.info(f"Input paths:")
+        logger.info(f"  Training risk scores: {train_path}")
+        logger.info(f"  Validation risk scores: {val_path}")
+        logger.info(f"  Output directory: {output_dir}")
+        
+        # Ensure output directory exists
+        output_dir.mkdir(parents=True, exist_ok=True)
         
         # Load data
-        train_df, validation_df = load_risk_scores(output_dir, logger)
+        train_df, validation_df = load_risk_scores(train_path, val_path, logger)
         
         # Validate columns
         validate_required_columns(train_df, "Training data", logger)

@@ -8,6 +8,7 @@ The following scripts have been updated:
 - `scripts/feature_engineering.py` - Feature engineering pipeline
 - `scripts/train.py` - Model training pipeline
 - `scripts/predict.py` - Prediction pipeline
+- `scripts/metrics_calculation.py` - Metrics calculation and validation pipeline
 
 Each script maintains **backward compatibility** - if no arguments are provided, the scripts will use the default paths as before.
 
@@ -144,6 +145,51 @@ The script creates a single predictions file:
 <output-file>
 ```
 
+## Metrics Calculation Script
+
+### Usage
+
+```bash
+python scripts/metrics_calculation.py [OPTIONS]
+```
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--train-input` | Path to training risk scores CSV file | `output/risk_scores_train.csv` |
+| `--val-input` | Path to validation risk scores CSV file | `output/risk_scores_validation.csv` |
+| `--output-dir` | Directory for saving metric output files | `output/` |
+
+### Examples
+
+```bash
+# Use default paths
+python scripts/metrics_calculation.py
+
+# Specify custom input files
+python scripts/metrics_calculation.py --train-input output/risk_scores_train.csv --val-input output/risk_scores_validation.csv
+
+# Specify custom output directory
+python scripts/metrics_calculation.py --output-dir /path/to/output
+
+# Specify all paths
+python scripts/metrics_calculation.py --train-input my_train_scores.csv --val-input my_val_scores.csv --output-dir results
+```
+
+### Output Files
+
+The script creates the following files in the output directory:
+```
+<output-dir>/
+├── validation_summary.csv
+├── decile_analysis.csv
+├── threshold_analysis.csv
+├── ks_statistic.csv
+├── calibration_plot.csv
+└── model_performance_metrics.csv
+```
+
 ## Getting Help
 
 All scripts support the `--help` flag to display usage information:
@@ -152,6 +198,7 @@ All scripts support the `--help` flag to display usage information:
 python scripts/feature_engineering.py --help
 python scripts/train.py --help
 python scripts/predict.py --help
+python scripts/metrics_calculation.py --help
 ```
 
 ## Common Workflows
@@ -165,7 +212,10 @@ python scripts/feature_engineering.py
 # Step 2: Train model
 python scripts/train.py
 
-# Step 3: Make predictions (requires new_applications.csv in data/)
+# Step 3: Calculate metrics
+python scripts/metrics_calculation.py
+
+# Step 4: Make predictions (requires new_applications.csv in data/)
 python scripts/predict.py
 ```
 
@@ -185,7 +235,13 @@ python scripts/train.py \
   --models-dir /models \
   --output-dir /results
 
-# Step 3: Make predictions with custom paths
+# Step 3: Calculate metrics with custom paths
+python scripts/metrics_calculation.py \
+  --train-input /results/risk_scores_train.csv \
+  --val-input /results/risk_scores_validation.csv \
+  --output-dir /results
+
+# Step 4: Make predictions with custom paths
 python scripts/predict.py \
   --input /data/new/applications.csv \
   --output /results/predictions.csv \
